@@ -55,10 +55,10 @@ dependencies {
     implementation(libs.androidx.navigation.compose)
     implementation("androidx.compose.material:material-icons-extended:1.7.5")
 
-    // Hilt
+    // Hilt with metadata override
+    implementation(libs.kotlinx.metadata.jvm)
     implementation(libs.hilt.android)
     kapt(libs.hilt.compiler)
-    kapt(libs.kotlinx.metadata.jvm) // Override metadata for Hilt compiler
     implementation(libs.androidx.hilt.navigation.compose)
 
     // Firebase
