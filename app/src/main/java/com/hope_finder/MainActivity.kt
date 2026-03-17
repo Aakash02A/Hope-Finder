@@ -20,8 +20,8 @@ class MainActivity : ComponentActivity() {
         setContent {
             HopeFinderTheme {
                 val navController = rememberNavController()
-                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    // Padding is handled within individual screens or by the NavHost
+                @Suppress("UnusedMaterial3ScaffoldPaddingParameter")
+                Scaffold(modifier = Modifier.fillMaxSize()) { _ ->
                     NavGraph(navController = navController)
                 }
             }

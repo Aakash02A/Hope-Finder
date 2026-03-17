@@ -1,36 +1,43 @@
 package com.hope_finder.ui.radar
 
-import androidx.compose.animation.core.*
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
-import kotlin.math.PI
-import kotlin.math.cos
-import kotlin.math.sin
+import com.hope_finder.data.model.RadarCell
+import com.hope_finder.ui.home.CircularRadarView
+import com.hope_finder.ui.home.RadarTarget
+import com.hope_finder.ui.home.RadarTargetType
+import com.hope_finder.ui.theme.SaasBgPrimary
+import com.hope_finder.ui.theme.SaasBgSecondary
+import com.hope_finder.ui.theme.SaasError
+import com.hope_finder.ui.theme.SaasPrimary
+import com.hope_finder.ui.theme.SaasStroke
+import com.hope_finder.ui.theme.SaasSuccess
+import com.hope_finder.ui.theme.SaasText
+import com.hope_finder.ui.theme.SaasTextSecond
+import com.hope_finder.ui.theme.SaasWhite
+import com.hope_finder.ui.theme.SaasWarning
+import androidx.compose.foundation.shape.RoundedCornerShape
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RadarScreen(
     navController: NavController,
-    probeId: String = "probe_01", // Default ID for demonstration
-    viewModel: RadarViewModel = hiltViewModel()
+    probeId: String = "probe_01",
+    viewModel: RadarViewModel = hiltViewModel(),
+    isInBottomNav: Boolean = false
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
@@ -38,202 +45,224 @@ fun RadarScreen(
         viewModel.startScanning(probeId)
     }
 
+    // Generate mock targets for the radar (in real scenario, these would come from viewModel)
+    val radarTargets = remember {
+        listOf(
+            RadarTarget(angle = 45f, distance = 0.6f, type = RadarTargetType.LIFE_SIGNATURE),
+            RadarTarget(angle = 120f, distance = 0.8f, type = RadarTargetType.MOVEMENT),
+            RadarTarget(angle = 200f, distance = 0.4f, type = RadarTargetType.OBJECT),
+            RadarTarget(angle = 300f, distance = 0.7f, type = RadarTargetType.LIFE_SIGNATURE),
+        )
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Radar Scan: $probeId") },
+                title = {
+                    Column {
+                        Text("Radar Scanning", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = SaasText)
+                        Text("Probe: $probeId", fontSize = 12.sp, color = SaasTextSecond)
+                    }
+                },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = SaasText)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color(0xFF1A1A1A),
-                    titleContentColor = Color.White,
-                    navigationIconContentColor = Color.White
+                    containerColor = SaasWhite,
+                    titleContentColor = SaasText,
+                    navigationIconContentColor = SaasText
                 )
             )
         },
-        containerColor = Color(0xFF0F0F0F)
+        containerColor = SaasBgPrimary
     ) { padding ->
-        Column(
+        LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
+                .background(SaasBgPrimary)
                 .padding(padding)
                 .padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Radar Visualization
-            RadarAnimation(modifier = Modifier.size(280.dp))
+            // Scanning Status
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(SaasSuccess.copy(alpha = 0.1f))
+                        .padding(12.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "● SCANNING ACTIVE",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = SaasSuccess
+                    )
+                }
+            }
 
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Pulse & Bio Stats
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                BioMetricCard(
-                    title = "Heartbeat",
-                    value = if (uiState.radarData.heartbeatSignal.isNotEmpty()) "${uiState.radarData.heartbeatSignal.last().toInt()} BPM" else "--",
-                    unit = "BPM",
-                    icon = "❤️",
-                    modifier = Modifier.weight(1f)
-                )
-                BioMetricCard(
-                    title = "Respiration",
-                    value = "${uiState.radarData.respirationRate}",
-                    unit = "RPM",
-                    icon = "🫁",
-                    modifier = Modifier.weight(1f)
+            // Circular Radar View
+            item {
+                CircularRadarView(
+                    targets = radarTargets,
+                    isScanning = true,
+                    scannerColor = SaasSuccess
                 )
             }
 
-            // Signal Waveform
-            WaveformGraph(
-                signals = uiState.radarData.heartbeatSignal,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(120.dp)
-                    .background(Color.Black, MaterialTheme.shapes.medium)
-                    .padding(8.dp)
-            )
-
-            // Depth & Signal Strength
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E))
-            ) {
-                Row(
-                    modifier = Modifier.padding(16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column {
-                        Text("Scan Depth", style = MaterialTheme.typography.labelMedium, color = Color.Gray)
-                        Text("${uiState.radarData.scanDepth} Meters", style = MaterialTheme.typography.titleLarge, color = Color.White, fontWeight = FontWeight.Bold)
-                    }
-                    Column(horizontalAlignment = Alignment.End) {
-                        Text("Signal Strength", style = MaterialTheme.typography.labelMedium, color = Color.Gray)
-                        LinearProgressIndicator(
-                            progress = { uiState.radarData.signalStrength / 100f },
-                            modifier = Modifier.width(100.dp).height(8.dp),
-                            color = if (uiState.radarData.signalStrength > 70) Color.Green else Color.Yellow,
-                            trackColor = Color.DarkGray,
-                            strokeCap = androidx.compose.ui.graphics.StrokeCap.Round
-                        )
-                        Text("${uiState.radarData.signalStrength}%", style = MaterialTheme.typography.labelSmall, color = Color.White)
+            // Scanning Sector & Statistics
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        text = "Scanning Sector A3",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = SaasText
+                    )
+                    
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(SaasWhite)
+                            .padding(16.dp)
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            StatRow("Distance", "5.7 meters", SaasPrimary)
+                            StatRow("Signal Strength", "${uiState.radarData.signalStrength}%", SaasSuccess)
+                            StatRow("Confidence Score", "92%", SaasWarning)
+                            StatRow("Scan Depth", "${uiState.radarData.scanDepth}M", SaasError)
+                        }
                     }
                 }
             }
-            
-            Text(
-                "STATUS: ANALYZING SIGNALS",
-                color = Color(0xFF00FF00),
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Bold
-            )
+
+            // Bio Metrics
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        text = "Detected Signals",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = SaasText
+                    )
+                    
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        MetricCardSmall(
+                            label = "Heartbeat",
+                            value = if (uiState.radarData.heartbeatSignal.isNotEmpty()) "${uiState.radarData.heartbeatSignal.last().toInt()}" else "--",
+                            unit = "BPM",
+                            color = SaasError,
+                            modifier = Modifier.weight(1f)
+                        )
+                        MetricCardSmall(
+                            label = "Respiration",
+                            value = "${uiState.radarData.respirationRate}",
+                            unit = "RPM",
+                            color = SaasPrimary,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+            }
+
+            // Action Buttons
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Button(
+                        onClick = { navController.popBackStack() },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(48.dp)
+                            .clip(RoundedCornerShape(8.dp)),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = SaasPrimary,
+                            contentColor = SaasWhite
+                        )
+                    ) {
+                        Text("Return to Dashboard", fontWeight = FontWeight.Bold)
+                    }
+                    
+                    Button(
+                        onClick = { /* Rescan */ },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(48.dp)
+                            .clip(RoundedCornerShape(8.dp)),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = SaasBgSecondary,
+                            contentColor = SaasText
+                        )
+                    ) {
+                        Text("Rescan", fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+
+            item { Spacer(modifier = Modifier.height(20.dp)) }
         }
     }
 }
 
 @Composable
-fun RadarAnimation(modifier: Modifier = Modifier) {
-    val infiniteTransition = rememberInfiniteTransition(label = "RadarTransition")
-    val angle by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(2000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "RadarAngle"
-    )
-
-    Canvas(modifier = modifier) {
-        val center = Offset(size.width / 2, size.height / 2)
-        val radius = size.minDimension / 2
-
-        // Background Circles
-        for (i in 1..4) {
-            drawCircle(
-                color = Color(0xFF00FF00).copy(alpha = 0.2f),
-                radius = radius * (i / 4f),
-                center = center,
-                style = Stroke(width = 1.dp)
-            )
-        }
-
-        // Radar Sweep
-        val sweepAngle = angle * (PI / 180).toFloat()
-        val endX = center.x + radius * cos(sweepAngle)
-        val endY = center.y + radius * sin(sweepAngle)
-
-        drawArc(
-            brush = Brush.sweepGradient(
-                colors = listOf(Color.Transparent, Color(0xFF00FF00).copy(alpha = 0.5f)),
-                center = center
-            ),
-            startAngle = angle - 45f,
-            sweepAngle = 45f,
-            useCenter = true,
-            size = size
+private fun StatRow(
+    label: String,
+    value: String,
+    color: androidx.compose.ui.graphics.Color
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            fontSize = 12.sp,
+            color = SaasTextSecond,
+            fontWeight = FontWeight.Medium
         )
-
-        drawLine(
-            color = Color(0xFF00FF00),
-            start = center,
-            end = Offset(endX, endY),
-            strokeWidth = 2.dp.toPx()
+        Text(
+            text = value,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold,
+            color = color
         )
     }
 }
 
 @Composable
-fun WaveformGraph(signals: List<Float>, modifier: Modifier = Modifier) {
-    Canvas(modifier = modifier) {
-        if (signals.size < 2) return@Canvas
-        
-        val path = Path()
-        val width = size.width
-        val height = size.height
-        val maxPoints = 50
-        val displaySignals = signals.takeLast(maxPoints)
-        val dx = width / (maxPoints - 1)
-
-        displaySignals.forEachIndexed { index, value ->
-            // Normalize value assuming 0-100 range for heartbeat pulse
-            val y = height - (value / 100f * height)
-            val x = index * dx
-            if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
-        }
-
-        drawPath(
-            path = path,
-            color = Color(0xFF00FF00),
-            style = Stroke(width = 2.dp.toPx())
-        )
-    }
-}
-
-@Composable
-fun BioMetricCard(title: String, value: String, unit: String, icon: String, modifier: Modifier = Modifier) {
-    Card(
-        modifier = modifier,
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E))
+private fun MetricCardSmall(
+    label: String,
+    value: String,
+    unit: String,
+    color: androidx.compose.ui.graphics.Color,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(SaasWhite)
+            .padding(12.dp),
+        contentAlignment = Alignment.Center
     ) {
         Column(
-            modifier = Modifier.padding(12.dp),
-            horizontalAlignment = Alignment.Start
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(icon, fontSize = 16.sp)
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(title, style = MaterialTheme.typography.labelSmall, color = Color.Gray)
-            }
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(value, style = MaterialTheme.typography.headlineSmall, color = Color.White, fontWeight = FontWeight.Bold)
+            Text(label, fontSize = 11.sp, color = SaasTextSecond, fontWeight = FontWeight.Medium)
+            Text(value, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = color)
+            Text(unit, fontSize = 10.sp, color = SaasTextSecond)
         }
     }
 }

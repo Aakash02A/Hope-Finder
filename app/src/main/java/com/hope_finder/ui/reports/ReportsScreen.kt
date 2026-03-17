@@ -4,18 +4,29 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.hope_finder.data.model.RescueReport
+import com.hope_finder.ui.theme.SaasBgPrimary
+import com.hope_finder.ui.theme.SaasError
+import com.hope_finder.ui.theme.SaasSuccess
+import com.hope_finder.ui.theme.SaasText
+import com.hope_finder.ui.theme.SaasTextSecond
+import com.hope_finder.ui.theme.SaasWarning
+import com.hope_finder.ui.theme.SaasWhite
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -23,37 +34,51 @@ import java.util.*
 @Composable
 fun ReportsScreen(
     navController: NavController,
-    viewModel: ReportViewModel = hiltViewModel()
+    viewModel: ReportViewModel = hiltViewModel(),
+    isInBottomNav: Boolean = false
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Rescue Reports", fontWeight = FontWeight.Bold) },
-                actions = {
-                    IconButton(onClick = { /* Global Export All */ }) {
-                        Icon(Icons.Default.Share, contentDescription = "Export All")
+                title = {
+                    Column {
+                        Text("Reports", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = SaasText)
+                        Text("Historical rescue operations", fontSize = 12.sp, color = SaasTextSecond)
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = SaasWhite
+                )
             )
-        }
+        },
+        containerColor = SaasBgPrimary
     ) { padding ->
         if (uiState.isLoading) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
+            Box(modifier = Modifier
+                .fillMaxSize()
+                .background(SaasBgPrimary), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = SaasText)
             }
         } else if (uiState.reports.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("No rescue reports available", color = Color.Gray)
+            Box(modifier = Modifier
+                .fillMaxSize()
+                .background(SaasBgPrimary), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(Icons.Default.Description, contentDescription = null, tint = SaasTextSecond, modifier = Modifier.size(48.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text("No reports available", color = SaasTextSecond, fontSize = 14.sp)
+                }
             }
         } else {
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
+                    .background(SaasBgPrimary)
                     .padding(padding)
-                    .padding(horizontal = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
                 contentPadding = PaddingValues(bottom = 16.dp)
             ) {
                 items(uiState.reports, key = { it.id }) { report ->
@@ -91,7 +116,7 @@ fun ReportCard(report: RescueReport, onExport: () -> Unit) {
                     Text(
                         text = report.location,
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color.Gray
+                        color = SaasTextSecond
                     )
                 }
                 
@@ -123,7 +148,7 @@ fun ReportCard(report: RescueReport, onExport: () -> Unit) {
             Text(
                 text = "Recorded: ${format.format(Date(report.timestamp))}",
                 style = MaterialTheme.typography.labelSmall,
-                color = Color.Gray
+                color = SaasTextSecond
             )
 
             if (expanded) {

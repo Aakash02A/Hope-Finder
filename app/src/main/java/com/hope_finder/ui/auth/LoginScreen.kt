@@ -64,7 +64,7 @@ fun LoginScreen(
                 color = MaterialTheme.colorScheme.primary
             )
             Text(
-                text = "Login to RescueRadar",
+                text = "Login to HopeFinder",
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -78,7 +78,7 @@ fun LoginScreen(
                 modifier = Modifier.fillMaxWidth(),
                 leadingIcon = { Icon(Icons.Default.Email, contentDescription = null) },
                 isError = state.emailError != null,
-                supportingText = { state.emailError?.let { Text(it ?: "") } },
+                supportingText = { state.emailError?.let { Text(it) } },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                 singleLine = true
             )
@@ -101,7 +101,7 @@ fun LoginScreen(
                 },
                 visualTransformation = if (state.isPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                 isError = state.passwordError != null,
-                supportingText = { state.passwordError?.let { Text(it ?: "") } },
+                supportingText = { state.passwordError?.let { Text(it) } },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                 singleLine = true
             )

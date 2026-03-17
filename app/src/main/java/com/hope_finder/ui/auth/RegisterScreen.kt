@@ -64,7 +64,7 @@ fun RegisterScreen(
                 color = MaterialTheme.colorScheme.primary
             )
             Text(
-                text = "Join RescueRadar today",
+                text = "Join HopeFinder today",
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

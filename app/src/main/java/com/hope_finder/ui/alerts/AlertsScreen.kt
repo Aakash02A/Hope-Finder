@@ -1,24 +1,36 @@
 package com.hope_finder.ui.alerts
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.hope_finder.data.model.Alert
 import com.hope_finder.data.model.AlertPriority
 import com.hope_finder.data.model.AlertType
+import com.hope_finder.ui.theme.SaasBgPrimary
+import com.hope_finder.ui.theme.SaasError
+import com.hope_finder.ui.theme.SaasSuccess
+import com.hope_finder.ui.theme.SaasText
+import com.hope_finder.ui.theme.SaasTextSecond
+import com.hope_finder.ui.theme.SaasWarning
+import com.hope_finder.ui.theme.SaasWhite
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -26,36 +38,53 @@ import java.util.*
 @Composable
 fun AlertsScreen(
     navController: NavController,
-    viewModel: AlertViewModel = hiltViewModel()
+    viewModel: AlertViewModel = hiltViewModel(),
+    isInBottomNav: Boolean = false
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Alert Center", fontWeight = FontWeight.Bold) }
+                title = {
+                    Column {
+                        Text("Alerts", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = SaasText)
+                        Text("Active alerts and notifications", fontSize = 12.sp, color = SaasTextSecond)
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = SaasWhite
+                )
             )
-        }
+        },
+        containerColor = SaasBgPrimary
     ) { padding ->
         if (uiState.isLoading) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
+                CircularProgressIndicator(color = SaasText)
             }
         } else if (uiState.alerts.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("No active alerts", color = Color.Gray)
+            Box(modifier = Modifier
+                .fillMaxSize()
+                .background(SaasBgPrimary), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(Icons.Default.CheckCircle, contentDescription = null, tint = SaasSuccess, modifier = Modifier.size(48.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text("No active alerts", color = SaasTextSecond, fontSize = 14.sp)
+                }
             }
         } else {
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
+                    .background(SaasBgPrimary)
                     .padding(padding)
-                    .padding(horizontal = 16.dp),
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 contentPadding = PaddingValues(bottom = 16.dp)
             ) {
                 items(uiState.alerts, key = { it.id }) { alert ->
-                    AlertCard(
+                    SaasAlertCard(
                         alert = alert,
                         onResolve = { viewModel.resolveAlert(alert.id) }
                     )
@@ -66,78 +95,80 @@ fun AlertsScreen(
 }
 
 @Composable
-fun AlertCard(alert: Alert, onResolve: () -> Unit) {
-    val backgroundColor = when {
-        alert.isResolved -> Color(0xFFE8F5E9)
-        alert.priority == AlertPriority.HIGH -> Color(0xFFFFEBEE)
-        alert.priority == AlertPriority.MEDIUM -> Color(0xFFFFF3E0)
-        else -> Color(0xFFF5F5F5)
-    }
-
-    val contentColor = when {
-        alert.isResolved -> Color(0xFF2E7D32)
-        alert.priority == AlertPriority.HIGH -> Color(0xFFC62828)
-        alert.priority == AlertPriority.MEDIUM -> Color(0xFFEF6C00)
-        else -> Color(0xFF616161)
+fun SaasAlertCard(alert: Alert, onResolve: () -> Unit) {
+    val (contentColor, backgroundColor) = when {
+        alert.isResolved -> SaasSuccess to SaasSuccess.copy(alpha = 0.1f)
+        alert.priority == AlertPriority.HIGH -> SaasError to SaasError.copy(alpha = 0.1f)
+        alert.priority == AlertPriority.MEDIUM -> SaasWarning to SaasWarning.copy(alpha = 0.1f)
+        else -> SaasText to SaasBgPrimary
     }
 
     val icon = when (alert.type) {
         AlertType.HEARTBEAT_DETECTED -> Icons.Default.Favorite
         AlertType.RESPIRATION_DETECTED -> Icons.Default.Air
         AlertType.PROBE_FAILURE -> Icons.Default.Warning
-        AlertType.SIGNAL_ANOMALY -> Icons.Default.ErrorOutline
+        AlertType.SIGNAL_ANOMALY -> Icons.Outlined.ErrorOutline
     }
 
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = backgroundColor)
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(SaasWhite)
+            .padding(12.dp)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(icon, contentDescription = null, tint = contentColor)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(icon, contentDescription = null, tint = contentColor, modifier = Modifier.size(20.dp))
                     Spacer(modifier = Modifier.width(12.dp))
-                    Text(
-                        text = alert.title,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = contentColor
-                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = alert.title,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = SaasText
+                        )
+                        Text(
+                            text = alert.message,
+                            fontSize = 11.sp,
+                            color = SaasTextSecond,
+                            maxLines = 2
+                        )
+                    }
                 }
                 if (alert.isResolved) {
-                    Icon(Icons.Default.CheckCircle, contentDescription = "Resolved", tint = contentColor)
+                    Icon(Icons.Default.CheckCircle, contentDescription = "Resolved", tint = SaasSuccess, modifier = Modifier.size(20.dp))
                 }
             }
 
             Spacer(modifier = Modifier.height(8.dp))
-
-            Text(
-                text = alert.message,
-                style = MaterialTheme.typography.bodyMedium,
-                color = contentColor.copy(alpha = 0.8f)
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                val format = SimpleDateFormat("HH:mm:ss | MMM dd", Locale.getDefault())
+                val format = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
                 Text(
                     text = format.format(Date(alert.timestamp)),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = contentColor.copy(alpha = 0.6f)
+                    fontSize = 10.sp,
+                    color = SaasTextSecond
                 )
 
                 if (!alert.isResolved) {
-                    TextButton(onClick = onResolve) {
-                        Text("MARK AS RESOLVED", color = contentColor, fontWeight = FontWeight.Bold)
+                    TextButton(
+                        onClick = onResolve,
+                        modifier = Modifier.height(24.dp)
+                    ) {
+                        Text("Resolve", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = contentColor)
                     }
                 }
             }

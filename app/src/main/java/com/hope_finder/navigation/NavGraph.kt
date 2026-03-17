@@ -7,11 +7,7 @@ import androidx.navigation.compose.composable
 import com.hope_finder.ui.auth.ForgotPasswordScreen
 import com.hope_finder.ui.auth.LoginScreen
 import com.hope_finder.ui.auth.RegisterScreen
-import com.hope_finder.ui.home.HomeScreen
-import com.hope_finder.ui.radar.RadarScreen
-import com.hope_finder.ui.probe.ProbeScreen
-import com.hope_finder.ui.alerts.AlertsScreen
-import com.hope_finder.ui.reports.ReportsScreen
+import com.hope_finder.ui.main.MainScreen
 
 @Composable
 fun NavGraph(navController: NavHostController) {
@@ -23,10 +19,7 @@ fun NavGraph(navController: NavHostController) {
         composable(Screen.Register.route) { RegisterScreen(navController) }
         composable(Screen.ForgotPassword.route) { ForgotPasswordScreen(navController) }
 
-        composable(Screen.Home.route) { HomeScreen(navController) }
-        composable(Screen.Radar.route) { RadarScreen(navController) }
-        composable(Screen.Probe.route) { ProbeScreen(navController) }
-        composable(Screen.Alerts.route) { AlertsScreen(navController) }
-        composable(Screen.Reports.route) { ReportsScreen(navController) }
+        // Main app with bottom navigation
+        composable(Screen.Home.route) { MainScreen(navController) }
     }
 }

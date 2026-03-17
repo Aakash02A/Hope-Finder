@@ -9,6 +9,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.BatteryAlert
+import androidx.compose.material.icons.outlined.BatteryChargingFull
+import androidx.compose.material.icons.outlined.BatteryFull
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -179,9 +182,9 @@ fun BatteryIndicator(level: Int) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Icon(
             imageVector = when {
-                level > 80 -> Icons.Default.BatteryFull
-                level > 20 -> Icons.Default.BatteryChargingFull
-                else -> Icons.Default.BatteryAlert
+                level > 80 -> Icons.Outlined.BatteryFull
+                level > 20 -> Icons.Outlined.BatteryChargingFull
+                else -> Icons.Outlined.BatteryAlert
             },
             contentDescription = null,
             tint = batteryColor,
