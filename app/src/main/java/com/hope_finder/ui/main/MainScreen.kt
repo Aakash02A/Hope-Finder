@@ -1,5 +1,7 @@
 package com.hope_finder.ui.main
 
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.background
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
@@ -32,7 +34,6 @@ fun MainScreen(navController: NavHostController) {
     val currentSelectedItem = remember { mutableStateOf(BottomNavItem.Dashboard.route) }
     val innerNavController = rememberNavController()
 
-    @Suppress("UnusedMaterial3ScaffoldPaddingParameter")
     Scaffold(
         containerColor = SaasBgPrimary,
         bottomBar = {
@@ -57,13 +58,15 @@ fun MainScreen(navController: NavHostController) {
                         },
                         selected = currentSelectedItem.value == item.route,
                         onClick = {
-                            currentSelectedItem.value = item.route
-                            innerNavController.navigate(item.route) {
-                                popUpTo(innerNavController.graph.startDestinationId) {
-                                    saveState = true
+                            if (currentSelectedItem.value != item.route) {
+                                currentSelectedItem.value = item.route
+                                innerNavController.navigate(item.route) {
+                                    popUpTo(innerNavController.graph.startDestinationId) {
+                                        saveState = true
+                                    }
+                                    launchSingleTop = true
+                                    restoreState = true
                                 }
-                                launchSingleTop = true
-                                restoreState = true
                             }
                         },
                         colors = NavigationBarItemDefaults.colors(
@@ -77,11 +80,14 @@ fun MainScreen(navController: NavHostController) {
                 }
             }
         }
-    ) { _ ->
+    ) { paddingValues ->
         NavHost(
             navController = innerNavController,
             startDestination = BottomNavItem.Dashboard.route,
-            modifier = Modifier.background(SaasBgPrimary)
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .background(SaasBgPrimary)
         ) {
             composable(BottomNavItem.Dashboard.route) {
                 DashboardScreen(
@@ -90,6 +96,14 @@ fun MainScreen(navController: NavHostController) {
                     onNavigateToRadar = {
                         innerNavController.navigate(BottomNavItem.RadarScan.route)
                         currentSelectedItem.value = BottomNavItem.RadarScan.route
+                    },
+                    onNavigateToAlerts = {
+                        innerNavController.navigate(BottomNavItem.Alerts.route)
+                        currentSelectedItem.value = BottomNavItem.Alerts.route
+                    },
+                    onNavigateToProbes = {
+                        innerNavController.navigate(BottomNavItem.Probes.route)
+                        currentSelectedItem.value = BottomNavItem.Probes.route
                     }
                 )
             }

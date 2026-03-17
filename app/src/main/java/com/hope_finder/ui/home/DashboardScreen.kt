@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.Notifications
@@ -36,18 +35,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
-import com.hope_finder.data.model.DashboardStats
-import com.hope_finder.navigation.Screen
 import com.hope_finder.ui.theme.SaasBgPrimary
 import com.hope_finder.ui.theme.SaasBgSecondary
 import com.hope_finder.ui.theme.SaasError
 import com.hope_finder.ui.theme.SaasPrimary
-import com.hope_finder.ui.theme.SaasStroke
 import com.hope_finder.ui.theme.SaasSuccess
 import com.hope_finder.ui.theme.SaasText
 import com.hope_finder.ui.theme.SaasTextSecond
@@ -60,7 +55,9 @@ fun DashboardScreen(
     navController: NavHostController,
     viewModel: HomeViewModel = hiltViewModel(),
     isInBottomNav: Boolean = false,
-    onNavigateToRadar: () -> Unit = {}
+    onNavigateToRadar: () -> Unit = {},
+    onNavigateToAlerts: () -> Unit = {},
+    onNavigateToProbes: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
@@ -169,7 +166,6 @@ fun DashboardScreen(
                         modifier = Modifier.padding(bottom = 4.dp)
                     )
                     
-                    // 2x2 Grid of KPI Cards
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -228,78 +224,42 @@ fun DashboardScreen(
                         ActionButton(
                             label = "Start Scan",
                             icon = Icons.Default.Map,
-                            onClick = {
-                                if (isInBottomNav) {
-                                    onNavigateToRadar()
-                                } else {
-                                    navController.navigate(Screen.Radar.route)
-                                }
-                            },
+                            onClick = onNavigateToRadar,
                             modifier = Modifier.weight(1f)
                         )
                         ActionButton(
                             label = "View Alerts",
                             icon = Icons.Default.Notifications,
-                            onClick = { navController.navigate(Screen.Alerts.route) },
+                            onClick = onNavigateToAlerts,
                             modifier = Modifier.weight(1f)
                         )
                         ActionButton(
                             label = "View Devices",
                             icon = Icons.Default.Wifi,
-                            onClick = { navController.navigate(Screen.Probe.route) },
+                            onClick = onNavigateToProbes,
                             modifier = Modifier.weight(1f)
                         )
                     }
                 }
             }
 
-            // Performance Chart Section
+            // Honeycomb Cell Visualization (Conceptual)
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
-                        text = "Performance Analytics",
+                        text = "Active Cells (Honeycomb Structure)",
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
-                        color = SaasText,
-                        modifier = Modifier.padding(bottom = 4.dp)
+                        color = SaasText
                     )
                     
-                    // Scans Per Day Line Chart
-                    LineChartView(
-                        data = listOf(
-                            LineChartData("Day 1", 12f, SaasPrimary),
-                            LineChartData("Day 2", 19f, SaasPrimary),
-                            LineChartData("Day 3", 15f, SaasPrimary),
-                            LineChartData("Day 4", 25f, SaasPrimary),
-                            LineChartData("Day 5", 22f, SaasPrimary),
-                            LineChartData("Day 6", 28f, SaasPrimary),
-                            LineChartData("Day 7", 32f, SaasPrimary)
-                        ),
-                        title = "Scans Per Day (Last 7 Days)",
-                        maxValue = 40f
-                    )
-                }
-            }
-
-            // Detection Success Rate
-            item {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(
-                        text = "Detection Success Rate",
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = SaasText,
-                        modifier = Modifier.padding(bottom = 4.dp)
-                    )
+                    uiState.radarCells.forEach { cell ->
+                        CellCard(cell)
+                    }
                     
-                    PieChartView(
-                        segments = listOf(
-                            PieChartSegment("Heartbeat", 45f, SaasError),
-                            PieChartSegment("Movement", 28f, SaasWarning),
-                            PieChartSegment("Breathing", 27f, SaasSuccess)
-                        ),
-                        title = "Detection Types"
-                    )
+                    if (uiState.radarCells.isEmpty()) {
+                        Text("No active cells detected.", fontSize = 12.sp, color = SaasTextSecond)
+                    }
                 }
             }
 
@@ -307,7 +267,7 @@ fun DashboardScreen(
             item {
                 Column {
                     Text(
-                        text = "Recent Activity",
+                        text = "Recent Alerts",
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
                         color = SaasText,
@@ -317,8 +277,8 @@ fun DashboardScreen(
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             uiState.alerts.take(3).forEach { alert ->
                                 ActivityItemCard(
-                                    title = alert.message,
-                                    time = "Just now",
+                                    title = alert.title.ifEmpty { alert.message },
+                                    time = "Recently",
                                     severity = alert.severity
                                 )
                             }
@@ -343,6 +303,42 @@ fun DashboardScreen(
             }
 
             item { Spacer(modifier = Modifier.height(20.dp)) }
+        }
+    }
+}
+
+@Composable
+fun CellCard(cell: com.hope_finder.data.model.RadarCell) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(SaasWhite)
+            .padding(16.dp)
+    ) {
+        Column {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(cell.name, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                Text(
+                    cell.status,
+                    color = if (cell.status == "Scanning") SaasPrimary else SaasTextSecond,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Text("Master Node: ${cell.masterNodeId}", fontSize = 12.sp, color = SaasTextSecond)
+            Text("Probes: ${cell.probeIds.size}/6", fontSize = 12.sp, color = SaasTextSecond)
+            
+            Spacer(modifier = Modifier.height(12.dp))
+            // Simple visual representation of progress
+            Box(modifier = Modifier.fillMaxWidth().height(4.dp).background(SaasBgSecondary).clip(RoundedCornerShape(2.dp))) {
+                Box(modifier = Modifier.fillMaxWidth(cell.probeIds.size / 6f).height(4.dp).background(SaasSuccess).clip(RoundedCornerShape(2.dp)))
+            }
         }
     }
 }
@@ -387,49 +383,6 @@ private fun CompactKpiCard(
                 fontSize = 11.sp,
                 color = SaasTextSecond,
                 fontWeight = FontWeight.Medium
-            )
-        }
-    }
-}
-
-@Composable
-private fun KpiCardRow(
-    label: String,
-    value: String,
-    icon: ImageVector,
-    color: androidx.compose.ui.graphics.Color
-) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(SaasWhite)
-            .padding(16.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column {
-                Text(
-                    text = label,
-                    fontSize = 12.sp,
-                    color = SaasTextSecond,
-                    fontWeight = FontWeight.Medium
-                )
-                Text(
-                    text = value,
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = color
-                )
-            }
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = color,
-                modifier = Modifier.size(24.dp)
             )
         }
     }
