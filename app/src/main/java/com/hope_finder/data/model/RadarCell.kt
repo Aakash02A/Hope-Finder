@@ -2,8 +2,9 @@ package com.hope_finder.data.model
 
 data class RadarCell(
     val id: String = "",
-    val name: String = "Cell A",
+    val name: String = "",
+    val status: String = "Idle", // Scanning, Active, Idle
     val masterNodeId: String = "",
-    val probes: List<String> = emptyList(), // List of probe IDs
-    val status: String = "Inactive" // Active, Inactive, Alert
+    val probeIds: List<String> = emptyList(),
+    val signalStrength: Int = 0
 )

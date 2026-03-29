@@ -2,6 +2,7 @@ package com.hope_finder.ui.radar
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.hope_finder.data.model.RadarDetection
 import com.hope_finder.data.model.RadarProbeData
 import com.hope_finder.data.model.SystemAlert
 import com.hope_finder.data.model.RescueReport
@@ -27,6 +28,7 @@ class RadarViewModel @Inject constructor(
     val uiState: StateFlow<RadarUiState> = _uiState.asStateFlow()
 
     private var scanJob: Job? = null
+    private var dataGenJob: Job? = null
 
     fun toggleScanning(probeId: String) {
         if (_uiState.value.isScanning) {
@@ -37,12 +39,9 @@ class RadarViewModel @Inject constructor(
     }
 
     private fun startScanning(probeId: String) {
-        scanJob?.cancel()
         _uiState.value = _uiState.value.copy(isScanning = true, isLoading = true)
         
         scanJob = viewModelScope.launch {
-            // In a real app, we'd listen to Firebase. For simulation, we'll generate data.
-            // But first, try to get existing data
             repository.getRadarData(probeId).collectLatest { data ->
                 if (data != null) {
                     _uiState.value = _uiState.value.copy(radarData = data, isLoading = false)
@@ -51,46 +50,70 @@ class RadarViewModel @Inject constructor(
         }
 
         // Simulating real-time data generation and pushing to Firebase
-        viewModelScope.launch {
+        dataGenJob = viewModelScope.launch {
+            var currentDetections = mutableListOf<RadarDetection>()
+            
             while (_uiState.value.isScanning) {
-                val mockData = generateMockRadarData(probeId)
+                // Randomly add a new detection or update existing ones
+                if (Random.nextFloat() > 0.7f && currentDetections.size < 5) {
+                    currentDetections.add(
+                        RadarDetection(
+                            id = UUID.randomUUID().toString().take(8),
+                            angle = Random.nextFloat() * 360f,
+                            distance = 0.2f + Random.nextFloat() * 0.7f,
+                            type = if (Random.nextFloat() > 0.6f) "LIFE_SIGNATURE" else "MOVEMENT",
+                            confidence = Random.nextInt(50, 99)
+                        )
+                    )
+                }
+                
+                // Slowly age out or move detections
+                currentDetections = currentDetections.map { 
+                    it.copy(distance = (it.distance + (Random.nextFloat() - 0.5f) * 0.05f).coerceIn(0.1f, 0.9f))
+                }.toMutableList()
+
+                val mockData = generateMockRadarData(probeId, currentDetections)
                 repository.updateRadarData(probeId, mockData)
                 
                 // Check for "life detection" logic (simulation)
-                if (mockData.respirationRate > 12 && mockData.heartbeatSignal.last() > 60) {
-                    triggerLifeDetectedAlert(probeId, mockData)
+                val lifeSign = currentDetections.firstOrNull { it.type == "LIFE_SIGNATURE" && it.confidence > 80 }
+                if (lifeSign != null && Random.nextFloat() > 0.8f) {
+                    triggerLifeDetectedAlert(probeId, mockData, lifeSign)
                 }
                 
-                delay(2000) // Update every 2 seconds
+                delay(3000) // Update every 3 seconds
             }
         }
     }
 
     private fun stopScanning() {
         scanJob?.cancel()
+        dataGenJob?.cancel()
         _uiState.value = _uiState.value.copy(isScanning = false)
     }
 
-    private fun generateMockRadarData(probeId: String): RadarProbeData {
+    private fun generateMockRadarData(probeId: String, detections: List<RadarDetection>): RadarProbeData {
         return RadarProbeData(
             probeId = probeId,
             heartbeatSignal = listOf(Random.nextInt(60, 100).toFloat()),
             respirationRate = Random.nextInt(12, 20),
             signalStrength = Random.nextInt(70, 99),
             scanDepth = Random.nextDouble(1.0, 10.0).toFloat(),
-            timestamp = System.currentTimeMillis()
+            timestamp = System.currentTimeMillis(),
+            detections = detections
         )
     }
 
-    private fun triggerLifeDetectedAlert(probeId: String, data: RadarProbeData) {
+    private fun triggerLifeDetectedAlert(probeId: String, data: RadarProbeData, detection: RadarDetection) {
         viewModelScope.launch {
             val alert = SystemAlert(
                 id = UUID.randomUUID().toString(),
-                title = "Life Signal Detected!",
-                message = "Probe $probeId detected vital signs at ${data.scanDepth}m depth.",
+                title = "LIFE SIGNATURE DETECTED",
+                message = "Critical: Life signature identified at ${String.format("%.1f", data.scanDepth)}m depth in sector ${detection.angle.toInt()}°.",
                 severity = "High",
                 timestamp = System.currentTimeMillis(),
-                type = "LIFE_DETECTION"
+                type = "LIFE_DETECTION",
+                probeId = probeId
             )
             repository.triggerAlert(alert)
         }
@@ -102,7 +125,7 @@ class RadarViewModel @Inject constructor(
             val report = RescueReport(
                 id = UUID.randomUUID().toString(),
                 title = "Rescue Mission - $probeId",
-                location = "Sector A-${Random.nextInt(1, 10)}",
+                location = "Sector Alpha",
                 timestamp = System.currentTimeMillis(),
                 heartbeatBpm = data.heartbeatSignal.lastOrNull()?.toInt() ?: 0,
                 respirationRpm = data.respirationRate,

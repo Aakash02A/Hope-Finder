@@ -1,6 +1,6 @@
 [versions]
-agp = "9.1.0"
-kotlin = "1.9.23"
+agp = "8.7.2"
+kotlin = "2.0.21"
 kotlinxMetadataJvm = "0.6.2"
 coreKtx = "1.15.0"
 junit = "4.13.2"

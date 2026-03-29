@@ -22,8 +22,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.hope_finder.data.model.Alert
-import com.hope_finder.data.model.AlertPriority
-import com.hope_finder.data.model.AlertType
 import com.hope_finder.ui.theme.SaasBgPrimary
 import com.hope_finder.ui.theme.SaasError
 import com.hope_finder.ui.theme.SaasSuccess
@@ -98,16 +96,17 @@ fun AlertsScreen(
 fun SaasAlertCard(alert: Alert, onResolve: () -> Unit) {
     val (contentColor, backgroundColor) = when {
         alert.isResolved -> SaasSuccess to SaasSuccess.copy(alpha = 0.1f)
-        alert.priority == AlertPriority.HIGH -> SaasError to SaasError.copy(alpha = 0.1f)
-        alert.priority == AlertPriority.MEDIUM -> SaasWarning to SaasWarning.copy(alpha = 0.1f)
+        alert.priority.equals("HIGH", ignoreCase = true) -> SaasError to SaasError.copy(alpha = 0.1f)
+        alert.priority.equals("MEDIUM", ignoreCase = true) -> SaasWarning to SaasWarning.copy(alpha = 0.1f)
         else -> SaasText to SaasBgPrimary
     }
 
-    val icon = when (alert.type) {
-        AlertType.HEARTBEAT_DETECTED -> Icons.Default.Favorite
-        AlertType.RESPIRATION_DETECTED -> Icons.Default.Air
-        AlertType.PROBE_FAILURE -> Icons.Default.Warning
-        AlertType.SIGNAL_ANOMALY -> Icons.Outlined.ErrorOutline
+    val icon = when (alert.type.uppercase()) {
+        "HEARTBEAT_DETECTED" -> Icons.Default.Favorite
+        "RESPIRATION_DETECTED" -> Icons.Default.Air
+        "PROBE_FAILURE" -> Icons.Default.Warning
+        "LIFE_DETECTION" -> Icons.Default.Favorite
+        else -> Icons.Outlined.ErrorOutline
     }
 
     Box(

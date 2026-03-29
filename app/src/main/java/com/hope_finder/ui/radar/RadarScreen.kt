@@ -34,14 +34,19 @@ fun RadarScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
-    // Mock targets that appear when scanning
-    val radarTargets = remember(uiState.isScanning, uiState.radarData.timestamp) {
-        if (uiState.isScanning) {
-            listOf(
-                RadarTarget(angle = 45f, distance = 0.6f, type = RadarTargetType.LIFE_SIGNATURE),
-                RadarTarget(angle = 120f, distance = 0.8f, type = RadarTargetType.MOVEMENT)
+    // Map backend detections to radar UI targets
+    val radarTargets = remember(uiState.radarData.detections) {
+        uiState.radarData.detections.map { detection ->
+            RadarTarget(
+                angle = detection.angle,
+                distance = detection.distance,
+                type = when (detection.type) {
+                    "LIFE_SIGNATURE" -> RadarTargetType.LIFE_SIGNATURE
+                    "MOVEMENT" -> RadarTargetType.MOVEMENT
+                    else -> RadarTargetType.OBJECT
+                }
             )
-        } else emptyList()
+        }
     }
 
     Scaffold(

@@ -15,8 +15,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Error
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.SignalWifiStatusbarConnectedNoInternet4
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -35,10 +33,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hope_finder.data.model.SystemAlert
 import com.hope_finder.ui.theme.CmdAlert
-import com.hope_finder.ui.theme.CmdDivider
 import com.hope_finder.ui.theme.CmdOnBackground
-import com.hope_finder.ui.theme.CmdSurface
-import com.hope_finder.ui.theme.CmdSurfaceVariant
 import com.hope_finder.ui.theme.CmdWarning
 import com.hope_finder.ui.theme.CmdActive
 import java.text.SimpleDateFormat
@@ -173,9 +168,9 @@ fun AlertPanel(alerts: List<SystemAlert>) {
 private fun AlertPanelPreview() {
     AlertPanel(
         alerts = listOf(
-            SystemAlert("a1", "Life signal detected at Sector 4-B — immediate response required", "High", System.currentTimeMillis()),
-            SystemAlert("a2", "PROBE-BRAVO signal anomaly — intermittent packet loss", "Medium", System.currentTimeMillis() - 120_000),
-            SystemAlert("a3", "PROBE-CHARLIE battery below 15%", "Low", System.currentTimeMillis() - 300_000)
+            SystemAlert("a1", "Life signal", "Life signal detected at Sector 4-B — immediate response required", "High", System.currentTimeMillis()),
+            SystemAlert("a2", "Signal anomaly", "PROBE-BRAVO signal anomaly — intermittent packet loss", "Medium", System.currentTimeMillis() - 120_000),
+            SystemAlert("a3", "Low battery", "PROBE-CHARLIE battery below 15%", "Low", System.currentTimeMillis() - 300_000)
         )
     )
 }

@@ -1,19 +1,12 @@
 package com.hope_finder.data.model
 
-data class DashboardStats(
-    val probesOnline: Int = 0,
-    val activeScanZones: Int = 0,
-    val lifeSignalsDetected: Int = 0,
-    val rescueAlerts: Int = 0
-)
+import com.google.firebase.firestore.PropertyName
 
-data class RadarCell(
-    val id: String = "",
-    val name: String = "",
-    val status: String = "Idle", // Scanning, Active, Idle
-    val masterNodeId: String = "",
-    val probeIds: List<String> = emptyList(),
-    val signalStrength: Int = 0
+data class DashboardStats(
+    @get:PropertyName("probes_online") @set:PropertyName("probes_online") var probesOnline: Int = 0,
+    @get:PropertyName("active_scan_zones") @set:PropertyName("active_scan_zones") var activeScanZones: Int = 0,
+    @get:PropertyName("life_signals_detected") @set:PropertyName("life_signals_detected") var lifeSignalsDetected: Int = 0,
+    @get:PropertyName("rescue_alerts") @set:PropertyName("rescue_alerts") var rescueAlerts: Int = 0
 )
 
 data class LifeSignal(
@@ -26,11 +19,12 @@ data class LifeSignal(
 data class ConnectedProbe(
     val id: String = "",
     val name: String = "",
-    val batteryLevel: Int = 0,
+    @get:PropertyName("battery_level") @set:PropertyName("battery_level") var batteryLevel: Int = 0,
     val status: String = "Offline", // Online, Offline, Busy
     val temperature: Float = 0f,
-    val signalStrength: Int = 0,
-    val isMasterNode: Boolean = false
+    @get:PropertyName("signal_strength") @set:PropertyName("signal_strength") var signalStrength: Int = 0,
+    @get:PropertyName("is_master_node") @set:PropertyName("is_master_node") var isMasterNode: Boolean = false,
+    @get:PropertyName("last_active") @set:PropertyName("last_active") var lastActive: Long = 0
 )
 
 data class SystemAlert(
@@ -39,7 +33,7 @@ data class SystemAlert(
     val message: String = "",
     val severity: String = "Low", // Low, Medium, High
     val timestamp: Long = 0,
-    val isResolved: Boolean = false,
+    @get:PropertyName("resolved") @set:PropertyName("resolved") var isResolved: Boolean = false,
     val type: String = "GENERAL",
-    val probeId: String = ""
+    @get:PropertyName("probe_id") @set:PropertyName("probe_id") var probeId: String = ""
 )
