@@ -273,3 +273,11 @@ data class SessionSummaryData(
     val average_confidence: Float,
     val scan_coverage_percent: Int
 )
+
+/**
+ * Batch events response
+ */
+data class EventListResponse(
+    val status: String,
+    val events: List<DetectionResponse>
+)

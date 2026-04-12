@@ -53,7 +53,12 @@ fun RadarScreen(
             .padding(paddingValues)
     ) {
         // Header
-        RadarHeaderBar(showHeatMap = showHeatMap, onHeatMapToggle = { showHeatMap = it })
+        RadarHeaderBar(
+            showHeatMap = showHeatMap,
+            onHeatMapToggle = { showHeatMap = it },
+            onStartScan = { viewModel.startScan() },
+            onStopScan = { viewModel.stopScan() }
+        )
         
         LazyColumn(
             modifier = Modifier
@@ -156,7 +161,9 @@ fun RadarScreen(
 @Composable
 fun RadarHeaderBar(
     showHeatMap: Boolean,
-    onHeatMapToggle: (Boolean) -> Unit
+    onHeatMapToggle: (Boolean) -> Unit,
+    onStartScan: () -> Unit,
+    onStopScan: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -223,7 +230,7 @@ fun RadarHeaderBar(
             OutlinedButton(
                 onClick = { onHeatMapToggle(!showHeatMap) },
                 modifier = Modifier
-                    .weight(1f)
+                    .weight(0.5f)
                     .height(40.dp),
                 colors = ButtonDefaults.outlinedButtonColors(
                     contentColor = if (showHeatMap) AccentCyan else TextSecondaryGray
@@ -241,6 +248,32 @@ fun RadarHeaderBar(
                 )
                 Spacer(modifier = Modifier.width(6.dp))
                 Text("HEAT MAP", fontSize = 11.sp, fontWeight = FontWeight.Medium)
+            }
+
+            Button(
+                onClick = onStartScan,
+                modifier = Modifier
+                    .weight(1f)
+                    .height(40.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = SuccessGreen),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Icon(Icons.Default.PlayArrow, null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("START MISSION", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            }
+
+            Button(
+                onClick = onStopScan,
+                modifier = Modifier
+                    .weight(1f)
+                    .height(40.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = StatusCriticalRed),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Icon(Icons.Default.Stop, null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("TERMINATE", fontSize = 11.sp, fontWeight = FontWeight.Bold)
             }
         }
     }

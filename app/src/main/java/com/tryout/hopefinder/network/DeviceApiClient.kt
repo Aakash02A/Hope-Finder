@@ -251,6 +251,30 @@ class DeviceApiClient(private val baseUrl: String) {
         }
 
     /**
+     * Get live detections from the device (polled)
+     */
+    suspend fun getLiveEvents(): Result<List<DetectionResponse>> = withContext(Dispatchers.IO) {
+        try {
+            val request = Request.Builder()
+                .url("$baseUrl/events")
+                .build()
+
+            val response = httpClient.newCall(request).execute()
+            
+            if (response.isSuccessful) {
+                val body = response.body?.string() ?: ""
+                val eventsResponse = gson.fromJson(body, EventListResponse::class.java)
+                Result.success(eventsResponse.events)
+            } else {
+                Result.failure(Exception("HTTP ${response.code}"))
+            }
+        } catch (e: Exception) {
+            Log.e("DeviceApiClient", "Error polling events", e)
+            Result.failure(e)
+        }
+    }
+
+    /**
      * Check if device is reachable
      */
     suspend fun isDeviceReachable(): Boolean = withContext(Dispatchers.IO) {

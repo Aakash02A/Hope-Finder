@@ -1,13 +1,7 @@
-/**
- * ESP32 Master Probe Firmware
- * Radar-Based Living Person Detection System
- * 
- * Main application controller and state machine
- */
-
 #include <Arduino.h>
 #include <SPIFFS.h>
 #include <ArduinoJson.h>
+#include <WebServer.h>
 #include "hb100_sensor.h"
 #include "motion_detector.h"
 #include "sector_scanner.h"
@@ -16,35 +10,16 @@
 #include "calibration.h"
 
 // ============================================================================
-// COMPILE-TIME CONFIGURATION
+// CONFIGURATION
 // ============================================================================
-
-// Wi-Fi Configuration
 #define WIFI_SSID "RescueNet-5G"
 #define WIFI_PASSWORD "changeme123"
-#define API_SERVER_IP "192.168.1.1"
-#define API_SERVER_PORT 80
 
-// Hardware Configuration
-#define ADC_PIN 34
-#define MOTOR_PWM_PIN 5
-#define MOTOR_DIR_PIN 18
-#define OLED_SDA_PIN 21
-#define OLED_SCL_PIN 22
-
-// Operational Parameters
-#define SECTOR_DWELL_MS 3000        // Time to sample each sector
-#define BASELINE_REFRESH_INTERVAL_S 3600  // Re-calibrate baseline hourly
-#define MOTION_THRESHOLD 0.5        // Default motion detection threshold (volts)
-#define API_SEND_INTERVAL_MS 100    // Send detections to API every 100ms
-#define DISPLAY_UPDATE_INTERVAL_MS 100
-#define HEALTH_CHECK_INTERVAL_MS 5000
-#define CALIBRATION_DURATION_MS 60000    // 60 second calibration
+WebServer server(80);
 
 // ============================================================================
-// GLOBAL OBJECTS
+// GLOBAL OBJECTS & STATE
 // ============================================================================
-
 HB100Sensor radar_sensor;
 MotionDetector motion_detector;
 SectorScanner sector_scanner;
@@ -52,169 +27,119 @@ WiFiClient wifi_client;
 DisplayManager display;
 Calibration calibration;
 
-// ============================================================================
-// SYSTEM STATE MACHINE
-// ============================================================================
+enum SystemState { STATE_INIT, STATE_IDLE, STATE_SCANNING, STATE_ERROR };
+SystemState current_state = STATE_INIT;
 
-enum SystemState {
-    STATE_STARTUP,
-    STATE_SELF_CHECK,
-    STATE_CALIBRATION_WAITING,
-    STATE_CALIBRATING,
-    STATE_IDLE,
-    STATE_SCANNING,
-    STATE_ERROR
+struct DetectionRecord {
+    uint32_t timestamp;
+    uint8_t sector;
+    uint16_t angle;
+    uint8_t confidence;
 };
 
-SystemState current_state = STATE_STARTUP;
-SystemState previous_state = STATE_STARTUP;
+// Circular buffer for app polling
+DetectionRecord detections[50];
+int head = 0;
 
 // ============================================================================
-// GLOBAL STATE VARIABLES
+// API HANDLERS
 // ============================================================================
 
-struct {
-    uint32_t system_uptime_ms;
-    uint32_t last_detection_time;
-    uint32_t last_api_send_time;
-    uint32_t last_display_update_time;
-    uint32_t last_health_check_time;
-    uint32_t last_baseline_refresh_time;
+void handleStatus() {
+    StaticJsonDocument<512> doc;
+    doc["status"] = "success";
+    JsonObject data = doc.createNestedObject("data");
+    data["is_scanning"] = (current_state == STATE_SCANNING);
+    data["ip"] = WiFi.localIP().toString();
+    data["uptime"] = millis() / 1000;
     
-    bool radar_healthy;
-    bool wifi_connected;
-    bool calibration_valid;
-    bool scanning_active;
-    
-    uint16_t detection_count;
-    uint8_t last_confidence;
-    uint8_t last_sector;
-    
-    char error_code[32];
-    char error_message[128];
-} system_state;
-
-// ============================================================================
-// FUNCTION DECLARATIONS
-// ============================================================================
-
-void setup();
-void loop();
-void handleStateTransition();
-void updateSensors();
-void updateMotionDetection();
-void updateDisplay();
-void sendDetectionToApi(const MotionDetector::Detection& detection);
-void performHealthCheck();
-void doCalibration();
-void startScanning();
-void stopScanning();
-void handleError(const char* code, const char* message);
-void logEvent(const char* message);
-void initializeStorage();
-
-// ============================================================================
-// SETUP
-// ============================================================================
-
-void setup() {
-    // Initialize serial for debugging
-    Serial.begin(115200);
-    delay(100);
-    
-    Serial.println("\n\n=== Hope-Finder: Radar Detection System ===");
-    Serial.println("Starting Master Probe Firmware v1.0.0");
-    
-    // Initialize storage
-    initializeStorage();
-    
-    // Initialize hardware
-    Serial.println("[SETUP] Initializing HB100 radar sensor...");
-    if (!radar_sensor.begin()) {
-        handleError("RADAR_INIT_FAIL", "ADC initialization failed");
-        return;
-    }
-    
-    Serial.println("[SETUP] Initializing sector scanner...");
-    if (!sector_scanner.begin(SECTOR_DWELL_MS, false)) {  // No motor for prototype
-        handleError("SCANNER_INIT_FAIL", "Sector scanner initialization failed");
-        return;
-    }
-    
-    Serial.println("[SETUP] Initializing OLED display...");
-    if (!display.begin()) {
-        Serial.println("[WARNING] Display initialization failed (non-critical)");
-    }
-    
-    Serial.println("[SETUP] Initializing Wi-Fi...");
-    wifi_client.setApiUrl(API_SERVER_IP ":" API_SERVER_PORT);
-    if (!wifi_client.begin(WIFI_SSID, WIFI_PASSWORD, 15000)) {
-        handleError("WIFI_INIT_FAIL", "Failed to connect to Wi-Fi");
-    }
-    
-    // Check for existing calibration
-    Serial.println("[SETUP] Loading calibration profile...");
-    if (!calibration.loadFromStorage()) {
-        Serial.println("[INFO] No calibration found, waiting for user to start calibration");
-        system_state.calibration_valid = false;
-    } else {
-        Serial.println("[INFO] Calibration loaded successfully");
-        system_state.calibration_valid = true;
-        motion_detector.begin(
-            calibration.getProfile().baseline_voltage,
-            calibration.getProfile().motion_threshold
-        );
-    }
-    
-    // Initialize motion detector with defaults
-    motion_detector.begin(0.5f, MOTION_THRESHOLD);
-    
-    // Start state machine
-    current_state = STATE_SELF_CHECK;
-    Serial.println("[SETUP] Initialization complete, entering self-check...");
+    String response;
+    serializeJson(doc, response);
+    server.send(200, "application/json", response);
 }
 
-// ============================================================================
-// MAIN LOOP
-// ============================================================================
+void handleStartScan() {
+    current_state = STATE_SCANNING;
+    sector_scanner.startScan(3000); // 3s per sector
+    server.send(200, "application/json", "{\"status\":\"success\", \"message\":\"Scanning started\"}");
+}
+
+void handleStopScan() {
+    current_state = STATE_IDLE;
+    sector_scanner.stopScan();
+    server.send(200, "application/json", "{\"status\":\"success\", \"message\":\"Scanning stopped\"}");
+}
+
+void handleEvents() {
+    StaticJsonDocument<2048> doc;
+    doc["status"] = "success";
+    JsonArray events = doc.createNestedArray("events");
+    
+    // Return all events in buffer
+    for(int i = 0; i < 50; i++) {
+        if(detections[i].timestamp > 0) {
+            JsonObject obj = events.createNestedObject();
+            obj["timestamp"] = detections[i].timestamp;
+            obj["sector"] = detections[i].sector;
+            obj["angle"] = detections[i].angle;
+            obj["confidence"] = detections[i].confidence;
+        }
+    }
+    
+    // Clear buffer after reading
+    memset(detections, 0, sizeof(detections));
+    head = 0;
+
+    String response;
+    serializeJson(doc, response);
+    server.send(200, "application/json", response);
+}
+
+void setup() {
+    Serial.begin(115200);
+    SPIFFS.begin(true);
+    
+    radar_sensor.begin();
+    sector_scanner.begin(3000, true);
+    display.begin();
+    
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    while (WiFi.status() != WL_CONNECTED) { delay(500); Serial.print("."); }
+    
+    display.showStatus("WIFI", 0, "OK", 0, true, true);
+    
+    // Register API routes
+    server.on("/api/v1/device/status", HTTP_GET, handleStatus);
+    server.on("/api/v1/scan/start", HTTP_POST, handleStartScan);
+    server.on("/api/v1/scan/stop", HTTP_POST, handleStopScan);
+    server.on("/api/v1/events", HTTP_GET, handleEvents);
+    server.on("/api/v1/health", HTTP_GET, [](){ server.send(200, "application/json", "{\"healthy\":true}"); });
+    
+    server.begin();
+    current_state = STATE_IDLE;
+}
 
 void loop() {
-    // Update system uptime
-    system_state.system_uptime_ms = millis();
+    server.handleClient();
     
-    // State machine
-    handleStateTransition();
-    
-    // Update components
-    wifi_client.update();
-    
-    if (sector_scanner.isScanning()) {
+    if (current_state == STATE_SCANNING) {
         sector_scanner.update();
-        updateSensors();
-        updateMotionDetection();
+        HB100Sensor::SensorReading reading = radar_sensor.readSensor();
+        
+        MotionDetector::Detection det = motion_detector.processReading(
+            reading.filtered_voltage, 
+            reading.baseline_voltage,
+            sector_scanner.getCurrentSector(),
+            sector_scanner.getCurrentAngle()
+        );
+
+        if (det.confidence > 20) {
+            detections[head] = {millis(), det.sector, det.angle, det.confidence};
+            head = (head + 1) % 50;
+        }
     }
     
-    // Periodic updates
-    if (millis() - system_state.last_display_update_time > DISPLAY_UPDATE_INTERVAL_MS) {
-        updateDisplay();
-        system_state.last_display_update_time = millis();
-    }
-    
-    if (millis() - system_state.last_health_check_time > HEALTH_CHECK_INTERVAL_MS) {
-        performHealthCheck();
-        system_state.last_health_check_time = millis();
-    }
-    
-    // Check for baseline refresh
-    if (millis() - system_state.last_baseline_refresh_time > 
-        (BASELINE_REFRESH_INTERVAL_S * 1000)) {
-        Serial.println("[INFO] Refreshing baseline estimation...");
-        radar_sensor.resetBaseline();
-        system_state.last_baseline_refresh_time = millis();
-    }
-    
-    // Small delay to prevent watchdog trigger
-    delay(5);
+    delay(10);
 }
 
 // ============================================================================

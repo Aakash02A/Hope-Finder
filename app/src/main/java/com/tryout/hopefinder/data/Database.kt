@@ -11,7 +11,7 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface DetectionDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertDetection(detection: DetectionEntity)
+    suspend fun insertDetection(detection: DetectionEntity): Long
 
     @Query("SELECT * FROM detections ORDER BY timestamp DESC LIMIT :limit")
     fun getRecentDetections(limit: Int = 100): Flow<List<DetectionEntity>>

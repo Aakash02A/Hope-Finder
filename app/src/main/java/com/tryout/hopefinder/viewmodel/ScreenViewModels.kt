@@ -139,6 +139,15 @@ class DashboardViewModel(
             }
         }
     }
+
+    fun startStatusPolling() {
+        viewModelScope.launch {
+            while (isActive) {
+                refreshDeviceStatus()
+                delay(5000) // Poll every 5s
+            }
+        }
+    }
 }
 
 /**
@@ -146,7 +155,8 @@ class DashboardViewModel(
  * Manages radar screen state: detections, animation state, scanning
  */
 class RadarViewModel(
-    private val detectionRepository: DetectionRepository
+    private val detectionRepository: DetectionRepository,
+    private val sessionRepository: ScanSessionRepository
 ) : ViewModel() {
 
     private val _currentSector = MutableStateFlow(0)
@@ -164,9 +174,68 @@ class RadarViewModel(
     private val _scanStatus = MutableStateFlow<String?>(null)
     val scanStatus: StateFlow<String?> = _scanStatus.asStateFlow()
 
+    private var pollingJob: Job? = null
+
     init {
         // Start sweep animation
         startSweepAnimation()
+        // Monitor scan state to start/stop polling
+        monitorScanState()
+    }
+
+    private fun monitorScanState() {
+        viewModelScope.launch {
+            // This is a simplified check; in a real app, you'd observe DashboardViewModel's scan state
+            while (isActive) {
+                val isDeviceScanning = DeviceConnectionManager.apiClient?.getDeviceStatus()?.getOrNull()?.data?.system?.scanning ?: false
+                if (isDeviceScanning && pollingJob == null) {
+                    startPollingEvents()
+                } else if (!isDeviceScanning && pollingJob != null) {
+                    pollingJob?.cancel()
+                    pollingJob = null
+                }
+                delay(2000)
+            }
+        }
+    }
+
+    private fun startPollingEvents() {
+        pollingJob = viewModelScope.launch {
+            val apiClient = DeviceConnectionManager.apiClient ?: return@launch
+            while (isActive) {
+                val result = apiClient.getLiveEvents()
+                result.onSuccess { events ->
+                    events.forEach { resp ->
+                        val entity = DetectionEntity(
+                            eventId = resp.event_id,
+                            timestamp = resp.timestamp.toLongOrNull() ?: System.currentTimeMillis(),
+                            sector = resp.sector,
+                            sectorLabel = resp.sector_label,
+                            angle = resp.angle,
+                            rawSignal = resp.raw_signal,
+                            filteredSignal = resp.filtered_signal,
+                            baseline = resp.baseline,
+                            signalStrength = resp.signal_strength,
+                            motionLevel = resp.motion_level,
+                            motionLabel = resp.motion_label,
+                            confidence = resp.confidence,
+                            confidenceLevel = resp.confidence_level,
+                            humanPresencePossible = resp.human_presence_possible,
+                            wifiRssi = resp.wifi_rssi,
+                            scanDurationMs = resp.scan_duration_ms
+                        )
+                        detectionRepository.insertDetection(entity)
+                        
+                        // Auto-generate alert for high confidence
+                        if (resp.confidence >= 50) {
+                            // This would ideally be done in a Background Service or Repository
+                            // but for parity we'll trigger it here or via Repository trigger
+                        }
+                    }
+                }
+                delay(1000) // Poll events every 1s
+            }
+        }
     }
 
     private fun startSweepAnimation() {
@@ -216,6 +285,13 @@ class RadarViewModel(
                 val result = apiClient.stopScan()
                 result.onSuccess { response ->
                     _scanStatus.value = "Scan stopped"
+                    // Close session
+                    viewModelScope.launch {
+                        sessionRepository.getCurrentSession().firstOrNull()?.let { session ->
+                            val updated = session.copy(endTime = System.currentTimeMillis())
+                            sessionRepository.updateSession(updated)
+                        }
+                    }
                 }
                 result.onFailure { error ->
                     _scanStatus.value = "Failed to stop scan: ${error.message}"
@@ -484,12 +560,15 @@ class DashboardViewModelFactory(context: Context) : ViewModelProvider.Factory {
     }
 }
 
-class RadarViewModelFactory(context: Context) : ViewModelProvider.Factory {
+class RadarViewModelFactory(context: android.content.Context) : ViewModelProvider.Factory {
     private val factory = DataRepositoryFactory(context)
 
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
-        return RadarViewModel(factory.detectionRepository) as T
+        return RadarViewModel(
+            factory.detectionRepository,
+            factory.scanSessionRepository
+        ) as T
     }
 }
 

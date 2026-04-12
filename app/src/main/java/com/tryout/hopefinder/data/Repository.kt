@@ -10,7 +10,10 @@ import java.util.concurrent.TimeUnit
  * Abstracts database and API calls
  */
 
-class DetectionRepository(private val dao: DetectionDao) {
+class DetectionRepository(
+    private val dao: DetectionDao,
+    private val alertRepository: AlertRepository? = null
+) {
     
     fun getRecentDetections(limit: Int = 100): Flow<List<DetectionEntity>> {
         return dao.getRecentDetections(limit)
@@ -29,7 +32,22 @@ class DetectionRepository(private val dao: DetectionDao) {
     }
 
     suspend fun insertDetection(detection: DetectionEntity) {
-        dao.insertDetection(detection)
+        val rowId = dao.insertDetection(detection)
+        
+        // Auto-generate alert for high confidence detections
+        if (detection.confidence >= 50 && alertRepository != null) {
+            val alert = AlertEntity(
+                detectionId = rowId, // Note: dao.insertDetection returns Long ID
+                timestamp = detection.timestamp,
+                confidence = detection.confidence,
+                sector = detection.sector,
+                sectorLabel = detection.sectorLabel,
+                angle = detection.angle,
+                severity = if (detection.confidence >= 75) "HIGH" else "MEDIUM",
+                message = "Possible life detected in sector ${detection.sectorLabel} (${detection.confidence}%)"
+            )
+            alertRepository.insertAlert(alert)
+        }
     }
 
     suspend fun cleanupOldDetections(ageHours: Int = 24) {
@@ -151,8 +169,8 @@ class ReportRepository(private val dao: ReportSummaryDao) {
 class DataRepositoryFactory(private val context: Context) {
     private val database = HopeFinderDatabase.getInstance(context)
     
-    val detectionRepository by lazy { DetectionRepository(database.detectionDao()) }
     val alertRepository by lazy { AlertRepository(database.alertDao()) }
+    val detectionRepository by lazy { DetectionRepository(database.detectionDao(), alertRepository) }
     val calibrationRepository by lazy { CalibrationRepository(database.calibrationDao()) }
     val scanSessionRepository by lazy { ScanSessionRepository(database.scanSessionDao()) }
     val deviceStatusRepository by lazy { DeviceStatusRepository(database.deviceStatusDao()) }
