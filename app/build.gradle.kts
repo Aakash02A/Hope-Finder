@@ -2,18 +2,16 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
-    alias(libs.plugins.hilt)
-    alias(libs.plugins.google.services)
-    alias(libs.plugins.kapt)
+    alias(libs.plugins.ksp)
 }
 
 android {
-    namespace = "com.hope_finder"
+    namespace = "com.tryout.hopefinder"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.hope_finder"
-        minSdk = 26
+        applicationId = "com.tryout.hopefinder"
+        minSdk = 35
         targetSdk = 35
         versionCode = 1
         versionName = "1.0"
@@ -45,28 +43,23 @@ android {
 dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
-    implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.activity.compose)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
-    implementation(libs.androidx.navigation.compose)
-    implementation("androidx.compose.material:material-icons-extended:1.7.5")
-
-    // Hilt with metadata override
-    implementation(libs.kotlinx.metadata.jvm)
-    implementation(libs.hilt.android)
-    kapt(libs.hilt.compiler)
-    implementation(libs.androidx.hilt.navigation.compose)
-
-    // Firebase
-    implementation(platform(libs.firebase.bom))
-    implementation(libs.firebase.auth)
-    implementation(libs.firebase.firestore)
-    implementation(libs.firebase.messaging)
-    implementation(libs.firebase.analytics)
+    implementation(libs.androidx.compose.material.icons)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
+    
+    // Room
+    implementation(libs.androidx.room.runtime)
+    implementation(libs.androidx.room.ktx)
+    ksp(libs.androidx.room.compiler)
+    
+    // Network
+    implementation(libs.okhttp)
+    implementation(libs.gson)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

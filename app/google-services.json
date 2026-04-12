@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "267513164784",
+    "project_id": "hope-finder-6cef4",
+    "storage_bucket": "hope-finder-6cef4.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:267513164784:android:56741c4b2cedb988c0a335",
+        "android_client_info": {
+          "package_name": "com.tryout.hopefinder"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB_fc9Q_TD6j0W9rIXRZe73Rm-3vniZt1Y"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

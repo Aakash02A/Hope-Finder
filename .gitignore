@@ -13,6 +13,3 @@
 .externalNativeBuild
 .cxx
 local.properties
-app/google-services.json
-java_pid*.hprof
-build_*.txt
