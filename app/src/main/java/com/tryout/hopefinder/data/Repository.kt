@@ -3,6 +3,8 @@ package com.tryout.hopefinder.data
 import android.content.Context
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.TimeUnit
 
 /**
@@ -14,6 +16,10 @@ class DetectionRepository(
     private val dao: DetectionDao,
     private val alertRepository: AlertRepository? = null
 ) {
+
+    companion object {
+        private val insertMutex = Mutex()
+    }
     
     fun getRecentDetections(limit: Int = 100): Flow<List<DetectionEntity>> {
         return dao.getRecentDetections(limit)
@@ -31,22 +37,30 @@ class DetectionRepository(
         return dao.getDetectionsByConfidence(minConfidence)
     }
 
-    suspend fun insertDetection(detection: DetectionEntity) {
-        val rowId = dao.insertDetection(detection)
-        
-        // Auto-generate alert for high confidence detections
-        if (detection.confidence >= 50 && alertRepository != null) {
-            val alert = AlertEntity(
-                detectionId = rowId, // Note: dao.insertDetection returns Long ID
-                timestamp = detection.timestamp,
-                confidence = detection.confidence,
-                sector = detection.sector,
-                sectorLabel = detection.sectorLabel,
-                angle = detection.angle,
-                severity = if (detection.confidence >= 75) "HIGH" else "MEDIUM",
-                message = "Possible life detected in sector ${detection.sectorLabel} (${detection.confidence}%)"
-            )
-            alertRepository.insertAlert(alert)
+    suspend fun insertDetection(detection: DetectionEntity): Boolean {
+        return insertMutex.withLock {
+            if (dao.getDetectionCountByEventId(detection.eventId) > 0) {
+                return@withLock false
+            }
+
+            val rowId = dao.insertDetection(detection)
+
+            // Auto-generate alert for high confidence detections
+            if (detection.confidence >= 50 && alertRepository != null) {
+                val alert = AlertEntity(
+                    detectionId = rowId, // Note: dao.insertDetection returns Long ID
+                    timestamp = detection.timestamp,
+                    confidence = detection.confidence,
+                    sector = detection.sector,
+                    sectorLabel = detection.sectorLabel,
+                    angle = detection.angle,
+                    severity = if (detection.confidence >= 75) "HIGH" else "MEDIUM",
+                    message = "Possible life detected in sector ${detection.sectorLabel} (${detection.confidence}%)"
+                )
+                alertRepository.insertAlert(alert)
+            }
+
+            true
         }
     }
 

@@ -12,6 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -19,7 +20,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.tryout.hopefinder.data.DevicePreferences
 import com.tryout.hopefinder.ui.theme.*
+import com.tryout.hopefinder.viewmodel.DeviceConnectionManager
 
 /**
  * Profile Screen
@@ -30,6 +33,26 @@ fun ProfileScreen(
     paddingValues: PaddingValues = PaddingValues(0.dp),
     onLogout: () -> Unit
 ) {
+    val appContext = context ?: LocalContext.current
+    var deviceIp by remember {
+        mutableStateOf(
+            DevicePreferences.getSavedDeviceIp(appContext) ?: DeviceConnectionManager.deviceIp
+        )
+    }
+    var connectionMessage by remember { mutableStateOf<String?>(null) }
+
+    fun connectToDevice() {
+        val trimmedIp = deviceIp.trim()
+        if (trimmedIp.isBlank()) {
+            connectionMessage = "Enter the ESP32 IP address first"
+            return
+        }
+
+        DevicePreferences.saveDeviceIp(appContext, trimmedIp)
+        DeviceConnectionManager.initialize(trimmedIp)
+        connectionMessage = "Connected to $trimmedIp"
+    }
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -78,6 +101,61 @@ fun ProfileScreen(
                         fontWeight = FontWeight.Black,
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
                         letterSpacing = 1.sp
+                    )
+                }
+            }
+        }
+
+        item {
+            SectionHeader("DEVICE CONNECTION")
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = DarkSurface,
+                shape = RoundedCornerShape(16.dp),
+                border = BorderStroke(1.dp, BorderSubtle)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        text = "Point the app at your ESP32 MicroPython server.",
+                        color = TextSecondaryGray,
+                        fontSize = 12.sp
+                    )
+
+                    OutlinedTextField(
+                        value = deviceIp,
+                        onValueChange = { deviceIp = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("ESP32 IP Address") },
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                            focusedBorderColor = AccentCyan,
+                            unfocusedBorderColor = BorderSubtle,
+                            focusedLabelColor = AccentCyan,
+                            unfocusedLabelColor = TextSecondaryGray,
+                            cursorColor = AccentCyan
+                        )
+                    )
+
+                    Button(
+                        onClick = { connectToDevice() },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = AccentCyan),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.Default.Link, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Save and Connect", fontWeight = FontWeight.Bold)
+                    }
+
+                    Text(
+                        text = connectionMessage ?: "Saved target: ${DeviceConnectionManager.deviceIp}",
+                        color = if (connectionMessage == null) TextTertiaryGray else AccentCyan,
+                        fontSize = 11.sp
                     )
                 }
             }

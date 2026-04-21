@@ -58,6 +58,7 @@ class MainViewModel(
     }
 
     fun startPolling() {
+        pollingJob?.cancel()
         pollingJob = viewModelScope.launch {
             _pollingActive.value = true
             
@@ -103,7 +104,7 @@ class MainViewModel(
                         historyResponse.data.events.forEach { event ->
                             val detection = DetectionEntity(
                                 eventId = event.event_id,
-                                timestamp = System.currentTimeMillis(), // Parse from event.timestamp
+                                timestamp = parseDeviceTimestamp(event.timestamp),
                                 sector = event.sector,
                                 sectorLabel = event.sector_label,
                                 angle = event.angle,
@@ -120,13 +121,13 @@ class MainViewModel(
                                 scanDurationMs = event.scan_duration_ms,
                                 deviceId = event.device_id
                             )
-                            detectionRepository.insertDetection(detection)
-                            
+                            val inserted = detectionRepository.insertDetection(detection)
+
                             // Create alert if high confidence
-                            if (event.confidence >= 60) {
+                            if (inserted && event.confidence >= 60) {
                                 val alert = AlertEntity(
                                     detectionId = 0, // Set after insert
-                                    timestamp = System.currentTimeMillis(),
+                                    timestamp = detection.timestamp,
                                     confidence = event.confidence,
                                     sector = event.sector,
                                     sectorLabel = event.sector_label,
@@ -141,6 +142,12 @@ class MainViewModel(
                                 alertRepository.insertAlert(alert)
                             }
                         }
+                    }
+
+                    eventsResult.onFailure {
+                        _deviceConnected.value = false
+                        consecutiveFailures++
+                        Log.w("MainViewModel", "Event poll attempt $consecutiveFailures failed: ${it.message}")
                     }
                     
                     statusResult.onFailure {

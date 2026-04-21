@@ -116,7 +116,8 @@ void setup() {
     server.on("/api/v1/health", HTTP_GET, [](){ server.send(200, "application/json", "{\"healthy\":true}"); });
     
     server.begin();
-    current_state = STATE_IDLE;
+    current_state = STATE_SCANNING;
+    sector_scanner.startScan(3000);
 }
 
 void loop() {

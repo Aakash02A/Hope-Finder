@@ -144,7 +144,7 @@ class DashboardViewModel(
         viewModelScope.launch {
             while (isActive) {
                 refreshDeviceStatus()
-                delay(5000) // Poll every 5s
+                delay(1000) // Poll every 1s instead of 5s
             }
         }
     }
@@ -194,7 +194,7 @@ class RadarViewModel(
                     pollingJob?.cancel()
                     pollingJob = null
                 }
-                delay(2000)
+                delay(1000)
             }
         }
     }
@@ -208,7 +208,7 @@ class RadarViewModel(
                     events.forEach { resp ->
                         val entity = DetectionEntity(
                             eventId = resp.event_id,
-                            timestamp = resp.timestamp.toLongOrNull() ?: System.currentTimeMillis(),
+                            timestamp = parseDeviceTimestamp(resp.timestamp),
                             sector = resp.sector,
                             sectorLabel = resp.sector_label,
                             angle = resp.angle,
@@ -233,7 +233,7 @@ class RadarViewModel(
                         }
                     }
                 }
-                delay(1000) // Poll events every 1s
+                delay(250) // Poll events every 250ms for real-time
             }
         }
     }

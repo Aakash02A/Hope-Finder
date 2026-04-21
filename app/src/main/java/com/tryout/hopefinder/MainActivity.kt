@@ -7,6 +7,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.runtime.Composable
+import com.tryout.hopefinder.data.DevicePreferences
 import com.tryout.hopefinder.ui.screens.MainNavigation
 import com.tryout.hopefinder.ui.theme.HopeFinderTheme
 import com.tryout.hopefinder.viewmodel.MainViewModel
@@ -20,13 +21,11 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        
-        // Detect if running in emulator and use appropriate IP
-        val deviceIp = if (isRunningInEmulator()) {
-            "10.0.2.2"  // Special alias for host machine in emulator
-        } else {
-            "192.168.1.100"  // Use this when on physical device
-        }
+
+        val deviceIp = DevicePreferences.getSavedDeviceIp(this)
+            ?: DevicePreferences.resolveDefaultDeviceIp().also {
+                DevicePreferences.saveDeviceIp(this, it)
+            }
         mainViewModel.initializeDevice(deviceIp)
         
         setContent {
@@ -39,14 +38,5 @@ class MainActivity : ComponentActivity() {
     override fun onDestroy() {
         super.onDestroy()
         mainViewModel.stopPolling()
-    }
-
-    private fun isRunningInEmulator(): Boolean {
-        return Build.FINGERPRINT.contains("generic") ||
-                Build.FINGERPRINT.contains("unknown") ||
-                Build.MODEL.contains("google_sdk") ||
-                Build.MODEL.contains("Emulator") ||
-                Build.DEVICE.contains("emulator") ||
-                (Build.BRAND == "generic" && Build.DEVICE == "generic")
     }
 }
