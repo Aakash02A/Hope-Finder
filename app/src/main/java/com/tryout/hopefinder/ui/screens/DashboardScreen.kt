@@ -45,10 +45,6 @@ fun DashboardScreen(
     val isScanning by viewModel.isScanning.collectAsState(initial = false)
     val scanStatus by viewModel.scanStatus.collectAsState(initial = null)
 
-    LaunchedEffect(Unit) {
-        viewModel.startStatusPolling()
-    }
-
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()

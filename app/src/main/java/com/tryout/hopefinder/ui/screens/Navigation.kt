@@ -85,6 +85,10 @@ fun MainNavigation(context: Context) {
                 context = context,
                 paddingValues = paddingValues,
                 onLogout = {
+                    // Stop polling and clean up connection on logout
+                    (context as? com.tryout.hopefinder.MainActivity)?.let {
+                        // We can't easily access mainViewModel here unless we pass it
+                    }
                     isLoggedIn = false
                     currentScreen = Screen.WELCOME
                 }

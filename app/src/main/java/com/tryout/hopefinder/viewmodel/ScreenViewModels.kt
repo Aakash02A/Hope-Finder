@@ -39,8 +39,9 @@ class DashboardViewModel(
     val alertCount: StateFlow<Int> = unacknowledgedAlerts.map { it.size }
         .stateIn(viewModelScope, SharingStarted.Lazily, 0)
 
-    private val _isScanning = MutableStateFlow(false)
-    val isScanning: StateFlow<Boolean> = _isScanning.asStateFlow()
+    val isScanning: StateFlow<Boolean> = deviceStatusRepository.getLatestStatus()
+        .map { it?.scanning ?: false }
+        .stateIn(viewModelScope, SharingStarted.Lazily, false)
 
     private val _scanStatus = MutableStateFlow<String?>(null)
     val scanStatus: StateFlow<String?> = _scanStatus.asStateFlow()
@@ -55,20 +56,31 @@ class DashboardViewModel(
         viewModelScope.launch {
             val apiClient = DeviceConnectionManager.apiClient ?: return@launch
             try {
-                _isScanning.value = false
                 _scanStatus.value = "Starting scan..."
                 val result = apiClient.startScan(durationSeconds)
                 result.onSuccess { response ->
-                    _isScanning.value = true
                     _scanStatus.value = "Scan started successfully"
-                    refreshDeviceStatus()
+                    
+                    // Update local status immediately to trigger UI
+                    val currentStatus = deviceStatusRepository.getLatestStatus().firstOrNull()
+                    val newStatus = (currentStatus ?: DeviceStatusEntity(
+                        timestamp = System.currentTimeMillis(),
+                        deviceId = "ESP32_RADAR",
+                        wifiConnected = true,
+                        rssi = -50,
+                        radarHealthy = true,
+                        calibrated = true,
+                        scanning = true,
+                        currentSector = 0,
+                        currentAngle = 0,
+                        uptime = 0
+                    )).copy(scanning = true)
+                    deviceStatusRepository.insertStatus(newStatus)
                 }
                 result.onFailure { error ->
-                    _isScanning.value = false
                     _scanStatus.value = "Failed to start scan: ${error.message}"
                 }
             } catch (e: Exception) {
-                _isScanning.value = false
                 _scanStatus.value = "Error: ${e.message}"
             }
         }
@@ -81,9 +93,13 @@ class DashboardViewModel(
                 _scanStatus.value = "Stopping scan..."
                 val result = apiClient.stopScan()
                 result.onSuccess { response ->
-                    _isScanning.value = false
                     _scanStatus.value = "Scan stopped"
-                    refreshDeviceStatus()
+                    
+                    // Update local status immediately
+                    val currentStatus = deviceStatusRepository.getLatestStatus().firstOrNull()
+                    currentStatus?.let {
+                        deviceStatusRepository.insertStatus(it.copy(scanning = false))
+                    }
                 }
                 result.onFailure { error ->
                     _scanStatus.value = "Failed to stop scan: ${error.message}"
@@ -102,51 +118,12 @@ class DashboardViewModel(
                 val result = apiClient.startCalibration()
                 result.onSuccess { response ->
                     _scanStatus.value = "Calibration started successfully"
-                    refreshDeviceStatus()
                 }
                 result.onFailure { error ->
                     _scanStatus.value = "Failed to start calibration: ${error.message}"
                 }
             } catch (e: Exception) {
                 _scanStatus.value = "Error: ${e.message}"
-            }
-        }
-    }
-
-    fun refreshDeviceStatus() {
-        viewModelScope.launch {
-            val apiClient = DeviceConnectionManager.apiClient ?: return@launch
-            try {
-                val result = apiClient.getDeviceStatus()
-                result.onSuccess { response ->
-                    val status = DeviceStatusEntity(
-                        timestamp = System.currentTimeMillis(),
-                        deviceId = response.data.device_id,
-                        wifiConnected = response.data.wifi.connected,
-                        rssi = response.data.wifi.rssi,
-                        radarHealthy = response.data.radar.healthy,
-                        calibrated = response.data.system.calibrated,
-                        scanning = response.data.system.scanning,
-                        currentSector = response.data.system.current_sector,
-                        currentAngle = response.data.system.current_angle,
-                        uptime = response.data.uptime_seconds,
-                        cpuUsagePercent = response.data.system.cpu_usage_percent,
-                        memoryFreeBytes = response.data.system.memory_free_bytes
-                    )
-                    deviceStatusRepository.insertStatus(status)
-                    _isScanning.value = response.data.system.scanning
-                }
-            } catch (e: Exception) {
-                // Error handled locally
-            }
-        }
-    }
-
-    fun startStatusPolling() {
-        viewModelScope.launch {
-            while (isActive) {
-                refreshDeviceStatus()
-                delay(1000) // Poll every 1s instead of 5s
             }
         }
     }

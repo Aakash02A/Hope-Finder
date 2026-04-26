@@ -680,11 +680,9 @@ fun DetectionCard(detection: DetectionEntity) {
 }
 
 private fun getSectorLabel(sector: Int): String {
-    return when (sector) {
-        0 -> "NORTH"
-        1 -> "EAST"
-        2 -> "SOUTH"
-        3 -> "WEST"
-        else -> "UNKNOWN"
-    }
+    val labels = listOf(
+        "N", "NNE", "NE", "ENE", "E", "ESE",
+        "SE", "SSE", "S", "SSW", "SW", "WSW"
+    )
+    return labels.getOrElse(sector % 12) { "UNK" }
 }
