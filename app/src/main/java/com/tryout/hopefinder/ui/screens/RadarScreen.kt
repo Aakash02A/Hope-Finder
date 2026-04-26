@@ -43,6 +43,7 @@ fun RadarScreen(
     val currentAngle by viewModel.currentAngle.collectAsState(initial = 0)
     val currentSector by viewModel.currentSector.collectAsState(initial = 0)
     val recentDetections by viewModel.recentDetections.collectAsState(initial = emptyList())
+    val scanStatus by viewModel.scanStatus.collectAsState(initial = null)
     
     var showHeatMap by remember { mutableStateOf(true) }
 
@@ -119,6 +120,24 @@ fun RadarScreen(
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold
                     )
+                }
+            }
+
+            // Scan Status Message
+            if (scanStatus != null) {
+                item {
+                    Surface(
+                        color = SurfaceSlate.copy(alpha = 0.5f),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = scanStatus ?: "",
+                            color = AccentCyan,
+                            fontSize = 11.sp,
+                            modifier = Modifier.padding(8.dp)
+                        )
+                    }
                 }
             }
 

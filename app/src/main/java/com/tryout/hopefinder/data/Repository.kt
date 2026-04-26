@@ -6,6 +6,11 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.TimeUnit
+import com.google.firebase.Firebase
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.firestore
+import com.google.firebase.firestore.firestoreSettings
+import com.google.firebase.firestore.persistentCacheSettings
 
 /**
  * Repository Pattern for Data Access
@@ -72,6 +77,17 @@ class DetectionRepository(
 
 class AlertRepository(private val dao: AlertDao) {
     
+    private val db: FirebaseFirestore
+
+    init {
+        // Enable Firebase Offline Persistence
+        val settings = firestoreSettings {
+            setLocalCacheSettings(persistentCacheSettings {})
+        }
+        db = Firebase.firestore
+        db.firestoreSettings = settings
+    }
+    
     fun getUnacknowledgedAlerts(): Flow<List<AlertEntity>> {
         return dao.getUnacknowledgedAlerts()
     }
@@ -81,7 +97,27 @@ class AlertRepository(private val dao: AlertDao) {
     }
 
     suspend fun insertAlert(alert: AlertEntity) {
+        // 1. Store Locally
         dao.insertAlert(alert)
+        
+        // 2. Queue for Firebase (Syncs automatically when internet is available)
+        val alertMap = hashMapOf(
+            "timestamp" to alert.timestamp,
+            "confidence" to alert.confidence,
+            "sector" to alert.sector,
+            "sectorLabel" to alert.sectorLabel,
+            "severity" to alert.severity,
+            "message" to alert.message
+        )
+        
+        db.collection("radar_alerts")
+            .add(alertMap)
+            .addOnSuccessListener {
+                // Successfully queued or uploaded
+            }
+            .addOnFailureListener {
+                // Firebase handles caching, but log if needed
+            }
     }
 
     suspend fun acknowledgeAlert(alertId: Long) {

@@ -8,6 +8,8 @@ import com.tryout.hopefinder.data.*
 import com.tryout.hopefinder.network.DeviceApiClient
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
+import android.content.Intent
+import androidx.core.content.FileProvider
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
@@ -156,7 +158,8 @@ class DashboardViewModel(
  */
 class RadarViewModel(
     private val detectionRepository: DetectionRepository,
-    private val sessionRepository: ScanSessionRepository
+    private val sessionRepository: ScanSessionRepository,
+    private val deviceStatusRepository: DeviceStatusRepository
 ) : ViewModel() {
 
     private val _currentSector = MutableStateFlow(0)
@@ -169,83 +172,58 @@ class RadarViewModel(
     val animationProgress: StateFlow<Float> = _animationProgress.asStateFlow()
 
     val recentDetections: StateFlow<List<DetectionEntity>> = detectionRepository.getRecentDetections(100)
+        .map { list ->
+            // Only show detections from the last 10 seconds on the radar screen
+            val now = System.currentTimeMillis()
+            list.filter { (now - it.timestamp) < 10000 }
+        }
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
     private val _scanStatus = MutableStateFlow<String?>(null)
     val scanStatus: StateFlow<String?> = _scanStatus.asStateFlow()
 
-    private var pollingJob: Job? = null
-
     init {
-        // Start sweep animation
-        startSweepAnimation()
-        // Monitor scan state to start/stop polling
-        monitorScanState()
-    }
-
-    private fun monitorScanState() {
+        // Sync with device status for real-time angle updates
         viewModelScope.launch {
-            // This is a simplified check; in a real app, you'd observe DashboardViewModel's scan state
-            while (isActive) {
-                val isDeviceScanning = DeviceConnectionManager.apiClient?.getDeviceStatus()?.getOrNull()?.data?.system?.scanning ?: false
-                if (isDeviceScanning && pollingJob == null) {
-                    startPollingEvents()
-                } else if (!isDeviceScanning && pollingJob != null) {
-                    pollingJob?.cancel()
-                    pollingJob = null
-                }
-                delay(1000)
-            }
-        }
-    }
-
-    private fun startPollingEvents() {
-        pollingJob = viewModelScope.launch {
-            val apiClient = DeviceConnectionManager.apiClient ?: return@launch
-            while (isActive) {
-                val result = apiClient.getLiveEvents()
-                result.onSuccess { events ->
-                    events.forEach { resp ->
-                        val entity = DetectionEntity(
-                            eventId = resp.event_id,
-                            timestamp = parseDeviceTimestamp(resp.timestamp),
-                            sector = resp.sector,
-                            sectorLabel = resp.sector_label,
-                            angle = resp.angle,
-                            rawSignal = resp.raw_signal,
-                            filteredSignal = resp.filtered_signal,
-                            baseline = resp.baseline,
-                            signalStrength = resp.signal_strength,
-                            motionLevel = resp.motion_level,
-                            motionLabel = resp.motion_label,
-                            confidence = resp.confidence,
-                            confidenceLevel = resp.confidence_level,
-                            humanPresencePossible = resp.human_presence_possible,
-                            wifiRssi = resp.wifi_rssi,
-                            scanDurationMs = resp.scan_duration_ms
-                        )
-                        detectionRepository.insertDetection(entity)
-                        
-                        // Auto-generate alert for high confidence
-                        if (resp.confidence >= 50) {
-                            // This would ideally be done in a Background Service or Repository
-                            // but for parity we'll trigger it here or via Repository trigger
+            deviceStatusRepository.getLatestStatus().collect { status ->
+                status?.let {
+                    if (it.scanning) {
+                        // Use hardware angle if reported (non-zero), otherwise use our internal sweep
+                        if (it.currentAngle != 0) {
+                            _currentAngle.value = it.currentAngle
+                            _currentSector.value = it.currentSector
                         }
                     }
                 }
-                delay(250) // Poll events every 250ms for real-time
             }
         }
+        
+        // Internal sweep animation so the radar always looks active when scanning
+        startSweepAnimation()
     }
 
+    private var animationJob: Job? = null
+    
     private fun startSweepAnimation() {
-        viewModelScope.launch {
+        animationJob?.cancel()
+        animationJob = viewModelScope.launch {
             while (isActive) {
-                for (angle in 0..359 step 3) {
-                    _currentAngle.value = angle
-                    _currentSector.value = angle / 30  // 12 sectors
-                    _animationProgress.value = angle / 360f
-                    delay(30)  // ~12 FPS
+                // Collect the latest status to react immediately to disconnection
+                deviceStatusRepository.getLatestStatus().collect { status ->
+                    if (status?.scanning == true) {
+                        for (angle in 0..359 step 4) { // Step faster for smoother look
+                            _currentAngle.value = angle
+                            _currentSector.value = angle / 30
+                            _animationProgress.value = angle / 360f
+                            delay(30)
+                            // Break out of loop if scanning stops
+                            if (deviceStatusRepository.getLatestStatus().firstOrNull()?.scanning != true) break
+                        }
+                    } else {
+                        // Reset when stopped
+                        _currentAngle.value = 0
+                        delay(500)
+                    }
                 }
             }
         }
@@ -267,6 +245,21 @@ class RadarViewModel(
                 val result = apiClient.startScan(durationSeconds)
                 result.onSuccess { response ->
                     _scanStatus.value = "Scan started successfully"
+                    // Update local status immediately to trigger UI/Animation
+                    val currentStatus = deviceStatusRepository.getLatestStatus().firstOrNull()
+                    val newStatus = (currentStatus ?: DeviceStatusEntity(
+                        timestamp = System.currentTimeMillis(),
+                        deviceId = "ESP32_RADAR",
+                        wifiConnected = true,
+                        rssi = -50,
+                        radarHealthy = true,
+                        calibrated = true,
+                        scanning = true,
+                        currentSector = 0,
+                        currentAngle = 0,
+                        uptime = 0
+                    )).copy(scanning = true)
+                    deviceStatusRepository.insertStatus(newStatus)
                 }
                 result.onFailure { error ->
                     _scanStatus.value = "Failed to start scan: ${error.message}"
@@ -285,6 +278,13 @@ class RadarViewModel(
                 val result = apiClient.stopScan()
                 result.onSuccess { response ->
                     _scanStatus.value = "Scan stopped"
+                    
+                    // Update local status immediately
+                    val currentStatus = deviceStatusRepository.getLatestStatus().firstOrNull()
+                    currentStatus?.let {
+                        deviceStatusRepository.insertStatus(it.copy(scanning = false))
+                    }
+
                     // Close session
                     viewModelScope.launch {
                         sessionRepository.getCurrentSession().firstOrNull()?.let { session ->
@@ -447,14 +447,18 @@ class ReportsViewModel(
                 
                 val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
                 val fileName = "hope_finder_report_$timestamp.csv"
-                val file = File(context.filesDir, fileName)
+                val reportsDir = File(context.cacheDir, "reports")
+                if (!reportsDir.exists()) reportsDir.mkdirs()
+                val file = File(reportsDir, fileName)
                 
                 file.writeText(csv)
                 
                 _isExporting.value = false
                 _exportStatus.value = "CSV exported successfully: $fileName"
                 
-                // Clear message after 3 seconds
+                // Trigger sharing immediately for CSV as well
+                shareFile(file)
+                
                 delay(3000)
                 _exportStatus.value = null
             } catch (e: Exception) {
@@ -468,16 +472,18 @@ class ReportsViewModel(
         viewModelScope.launch {
             try {
                 _isExporting.value = true
-                _exportStatus.value = "Generating PDF..."
+                _exportStatus.value = "Generating Report..."
 
                 val detections = detectionRepository.getRecentDetections(10000).first()
                 val csv = generateCSV(detections)
                 
                 val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
-                val fileName = "hope_finder_report_$timestamp.txt"  // Using TXT as PDF requires external library
-                val file = File(context.filesDir, fileName)
+                val fileName = "hope_finder_report_$timestamp.txt"
+                val reportsDir = File(context.cacheDir, "reports")
+                if (!reportsDir.exists()) reportsDir.mkdirs()
+                val file = File(reportsDir, fileName)
                 
-                val pdfContent = """
+                val reportContent = """
                     HOPE-FINDER RADAR DETECTION REPORT
                     Generated: ${SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())}
                     
@@ -489,12 +495,14 @@ class ReportsViewModel(
                     $csv
                 """.trimIndent()
                 
-                file.writeText(pdfContent)
+                file.writeText(reportContent)
                 
                 _isExporting.value = false
-                _exportStatus.value = "Report exported successfully: $fileName"
+                _exportStatus.value = "Report generated: $fileName"
                 
-                // Clear message after 3 seconds
+                // Share the file
+                shareFile(file)
+                
                 delay(3000)
                 _exportStatus.value = null
             } catch (e: Exception) {
@@ -505,30 +513,27 @@ class ReportsViewModel(
     }
 
     fun shareReport() {
-        viewModelScope.launch {
-            try {
-                _isExporting.value = true
-                _exportStatus.value = "Preparing report to share..."
+        exportReportAsCSV() // Default share to CSV
+    }
 
-                val detections = detectionRepository.getRecentDetections(10000).first()
-                val csv = generateCSV(detections)
-                
-                val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
-                val fileName = "hope_finder_report_$timestamp.csv"
-                val file = File(context.filesDir, fileName)
-                
-                file.writeText(csv)
-                
-                _isExporting.value = false
-                _exportStatus.value = "Report ready to share: $fileName"
-                
-                // Clear message after 3 seconds
-                delay(3000)
-                _exportStatus.value = null
-            } catch (e: Exception) {
-                _isExporting.value = false
-                _exportStatus.value = "Failed to prepare report: ${e.message}"
+    private fun shareFile(file: File) {
+        try {
+            val uri = FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.fileprovider",
+                file
+            )
+            val intent = Intent(Intent.ACTION_SEND).apply {
+                type = if (file.name.endsWith(".csv")) "text/csv" else "text/plain"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
+            context.startActivity(Intent.createChooser(intent, "Share Report").apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            })
+        } catch (e: Exception) {
+            _exportStatus.value = "Share failed: ${e.message}"
         }
     }
 
@@ -567,7 +572,8 @@ class RadarViewModelFactory(context: android.content.Context) : ViewModelProvide
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         return RadarViewModel(
             factory.detectionRepository,
-            factory.scanSessionRepository
+            factory.scanSessionRepository,
+            factory.deviceStatusRepository
         ) as T
     }
 }

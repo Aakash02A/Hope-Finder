@@ -15,11 +15,11 @@ import kotlinx.coroutines.flow.*
  */
 object DeviceConnectionManager {
     var apiClient: DeviceApiClient? = null
-    var deviceIp: String = "192.168.1.100"
+    var deviceIp: String = "192.168.4.1"
     
     fun initialize(ip: String) {
         deviceIp = ip
-        apiClient = DeviceApiClient("http://$ip:80/api/v1")
+        apiClient = DeviceApiClient("http://$ip")
     }
 }
 
@@ -37,7 +37,6 @@ data class UiState<T>(
  */
 class MainViewModel(
     private val detectionRepository: DetectionRepository,
-    private val alertRepository: AlertRepository,
     private val deviceStatusRepository: DeviceStatusRepository
 ) : ViewModel() {
 
@@ -76,94 +75,142 @@ class MainViewModel(
                     
                     // Fetch device status
                     val statusResult = apiClient.getDeviceStatus()
-                    statusResult.onSuccess { response ->
-                        _deviceConnected.value = true
-                        consecutiveFailures = 0  // Reset on success
-                        
-                        // Store in database
-                        val status = DeviceStatusEntity(
-                            timestamp = System.currentTimeMillis(),
-                            deviceId = response.data.device_id,
-                            wifiConnected = response.data.wifi.connected,
-                            rssi = response.data.wifi.rssi,
-                            radarHealthy = response.data.radar.healthy,
-                            calibrated = response.data.system.calibrated,
-                            scanning = response.data.system.scanning,
-                            currentSector = response.data.system.current_sector,
-                            currentAngle = response.data.system.current_angle,
-                            uptime = response.data.uptime_seconds,
-                            cpuUsagePercent = response.data.system.cpu_usage_percent,
-                            memoryFreeBytes = response.data.system.memory_free_bytes
-                        )
-                        deviceStatusRepository.insertStatus(status)
-                    }
                     
-                    // Fetch recent events
-                    val eventsResult = apiClient.getEventHistory(limit = 100)
-                    eventsResult.onSuccess { historyResponse ->
-                        historyResponse.data.events.forEach { event ->
-                            val detection = DetectionEntity(
-                                eventId = event.event_id,
-                                timestamp = parseDeviceTimestamp(event.timestamp),
-                                sector = event.sector,
-                                sectorLabel = event.sector_label,
-                                angle = event.angle,
-                                rawSignal = event.raw_signal,
-                                filteredSignal = event.filtered_signal,
-                                baseline = event.baseline,
-                                signalStrength = event.signal_strength,
-                                motionLevel = event.motion_level,
-                                motionLabel = event.motion_label,
-                                confidence = event.confidence,
-                                confidenceLevel = event.confidence_level,
-                                humanPresencePossible = event.human_presence_possible,
-                                wifiRssi = event.wifi_rssi,
-                                scanDurationMs = event.scan_duration_ms,
-                                deviceId = event.device_id
+                    // Also try to fetch radar data directly
+                    val dataResult = apiClient.fetchEsp32Data()
+                    
+                    if (statusResult.isSuccess || dataResult.isSuccess) {
+                        _deviceConnected.value = true
+                        consecutiveFailures = 0
+                        
+                        val status = if (statusResult.isSuccess) {
+                            val response = statusResult.getOrThrow()
+                            DeviceStatusEntity(
+                                timestamp = System.currentTimeMillis(),
+                                deviceId = response.data.device_id,
+                                wifiConnected = response.data.wifi.connected,
+                                rssi = response.data.wifi.rssi,
+                                radarHealthy = response.data.radar.healthy,
+                                calibrated = response.data.system.calibrated,
+                                scanning = response.data.system.scanning,
+                                currentSector = response.data.system.current_sector,
+                                currentAngle = response.data.system.current_angle,
+                                uptime = response.data.uptime_seconds,
+                                cpuUsagePercent = response.data.system.cpu_usage_percent,
+                                memoryFreeBytes = response.data.system.memory_free_bytes
                             )
-                            val inserted = detectionRepository.insertDetection(detection)
+                        } else {
+                            // Synthesize status from /data presence
+                            DeviceStatusEntity(
+                                timestamp = System.currentTimeMillis(),
+                                deviceId = "ESP32_RADAR",
+                                wifiConnected = true,
+                                rssi = -50,
+                                radarHealthy = true,
+                                calibrated = true,
+                                scanning = true, // Force scanning true if we can see data
+                                currentSector = 0,
+                                currentAngle = 0,
+                                uptime = 0,
+                                cpuUsagePercent = 0,
+                                memoryFreeBytes = 0
+                            )
+                        }
+                        deviceStatusRepository.insertStatus(status)
 
-                            // Create alert if high confidence
-                            if (inserted && event.confidence >= 60) {
-                                val alert = AlertEntity(
-                                    detectionId = 0, // Set after insert
-                                    timestamp = detection.timestamp,
-                                    confidence = event.confidence,
-                                    sector = event.sector,
-                                    sectorLabel = event.sector_label,
-                                    angle = event.angle,
-                                    severity = when {
-                                        event.confidence >= 80 -> "HIGH"
-                                        event.confidence >= 60 -> "MEDIUM"
+                        dataResult.onSuccess { resp ->
+                            // Helper to parse distance strings like "1m", ">4m"
+                            fun parseDistance(dist: String): Float {
+                                val numeric = dist.replace(Regex("[^0-9.]"), "")
+                                val value = numeric.toFloatOrNull() ?: 5.0f
+                                // Normalize 0-1: 1.0 is close (0m), 0.1 is far (5m+)
+                                return (1.0f - (value / 5.0f)).coerceIn(0.1f, 1.0f)
+                            }
+
+                            val confidence = if (resp.motion_detected) {
+                                (50 + (resp.change_left + resp.change_right)).coerceIn(50, 100)
+                            } else {
+                                (resp.change_left + resp.change_right).coerceIn(0, 49)
+                            }
+
+                            if (resp.motion_detected || resp.change_left > 5 || resp.change_right > 5) {
+                                val isLeft = resp.change_left >= resp.change_right
+                                val distStr = if (isLeft) resp.left_distance else resp.right_distance
+                                
+                                val detection = DetectionEntity(
+                                    eventId = "esp32_${resp.timestamp}_${System.currentTimeMillis()}",
+                                    timestamp = System.currentTimeMillis(),
+                                    sector = if (isLeft) 10 else 2,
+                                    sectorLabel = if (isLeft) "LEFT" else "RIGHT",
+                                    angle = if (isLeft) 300 else 60,
+                                    rawSignal = resp.change_left.toFloat(),
+                                    filteredSignal = resp.change_right.toFloat(),
+                                    baseline = 0f,
+                                    signalStrength = parseDistance(distStr), // Use for distance mapping
+                                    motionLevel = if (resp.motion_detected) 3 else 1,
+                                    motionLabel = if (resp.motion_detected) "MOTION" else "STILL",
+                                    confidence = confidence,
+                                    confidenceLevel = when {
+                                        confidence >= 75 -> "HIGH"
+                                        confidence >= 50 -> "MEDIUM"
                                         else -> "LOW"
                                     },
-                                    message = "Possible human presence detected at ${event.sector_label} (${event.confidence}% confidence)"
+                                    humanPresencePossible = resp.motion_detected,
+                                    wifiRssi = 0,
+                                    scanDurationMs = 0,
+                                    deviceId = "ESP32_RADAR"
                                 )
-                                alertRepository.insertAlert(alert)
+                                detectionRepository.insertDetection(detection)
                             }
                         }
-                    }
-
-                    eventsResult.onFailure {
+                    } else {
                         _deviceConnected.value = false
                         consecutiveFailures++
-                        Log.w("MainViewModel", "Event poll attempt $consecutiveFailures failed: ${it.message}")
-                    }
-                    
-                    statusResult.onFailure {
-                        _deviceConnected.value = false
-                        consecutiveFailures++
-                        Log.w("MainViewModel", "Poll attempt $consecutiveFailures failed: ${it.message}")
+                        
+                        // Insert disconnected status so UI knows to stop
+                        val disconnectedStatus = DeviceStatusEntity(
+                            timestamp = System.currentTimeMillis(),
+                            deviceId = "ESP32_RADAR",
+                            wifiConnected = false,
+                            rssi = -100,
+                            radarHealthy = false,
+                            calibrated = false,
+                            scanning = false,
+                            currentSector = 0,
+                            currentAngle = 0,
+                            uptime = 0
+                        )
+                        deviceStatusRepository.insertStatus(disconnectedStatus)
                     }
                     
                 } catch (e: Exception) {
                     _deviceConnected.value = false
                     consecutiveFailures++
                     Log.e("MainViewModel", "Polling exception (attempt $consecutiveFailures)", e)
+                    
+                    // Insert disconnected status
+                    val disconnectedStatus = DeviceStatusEntity(
+                        timestamp = System.currentTimeMillis(),
+                        deviceId = "ESP32_RADAR",
+                        wifiConnected = false,
+                        rssi = -100,
+                        radarHealthy = false,
+                        calibrated = false,
+                        scanning = false,
+                        currentSector = 0,
+                        currentAngle = 0,
+                        uptime = 0
+                    )
+                    deviceStatusRepository.insertStatus(disconnectedStatus)
                 }
                 
                 if (consecutiveFailures < maxConsecutiveFailures) {
-                    delay(3000)  // Poll every 3 seconds
+                    delay(1500)  // Poll faster (every 1.5s)
+                    
+                    // Periodically cleanup very old detections (older than 1 minute)
+                    if (System.currentTimeMillis() % 10000 < 2000) {
+                        detectionRepository.cleanupOldDetections(1) // Keep only very recent ones
+                    }
                 }
             }
             
@@ -194,7 +241,6 @@ class MainViewModelFactory(
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         return MainViewModel(
             factory.detectionRepository,
-            factory.alertRepository,
             factory.deviceStatusRepository
         ) as T
     }

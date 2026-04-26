@@ -134,6 +134,18 @@ data class ReportSummaryEntity(
 )
 
 /**
+ * Raw ESP32 radar data format
+ */
+data class Esp32RadarData(
+    val change_left: Int,
+    val right_distance: String,
+    val timestamp: Long,
+    val change_right: Int,
+    val left_distance: String,
+    val motion_detected: Boolean
+)
+
+/**
  * Raw API response model
  */
 data class DetectionResponse(

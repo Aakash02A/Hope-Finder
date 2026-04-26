@@ -23,6 +23,9 @@ import androidx.compose.ui.unit.sp
 import com.tryout.hopefinder.data.DevicePreferences
 import com.tryout.hopefinder.ui.theme.*
 import com.tryout.hopefinder.viewmodel.DeviceConnectionManager
+import com.tryout.hopefinder.viewmodel.MainViewModel
+import com.tryout.hopefinder.viewmodel.MainViewModelFactory
+import androidx.lifecycle.viewmodel.compose.viewModel
 
 /**
  * Profile Screen
@@ -31,6 +34,7 @@ import com.tryout.hopefinder.viewmodel.DeviceConnectionManager
 fun ProfileScreen(
     context: android.content.Context? = null,
     paddingValues: PaddingValues = PaddingValues(0.dp),
+    mainViewModel: MainViewModel = viewModel(factory = context?.let { MainViewModelFactory(it) }),
     onLogout: () -> Unit
 ) {
     val appContext = context ?: LocalContext.current
@@ -49,7 +53,8 @@ fun ProfileScreen(
         }
 
         DevicePreferences.saveDeviceIp(appContext, trimmedIp)
-        DeviceConnectionManager.initialize(trimmedIp)
+        // This re-initializes the API client AND restarts the background polling
+        mainViewModel.initializeDevice(trimmedIp)
         connectionMessage = "Connected to $trimmedIp"
     }
 
