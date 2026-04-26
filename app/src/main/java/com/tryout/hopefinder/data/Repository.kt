@@ -21,6 +21,15 @@ class DetectionRepository(
     private val dao: DetectionDao,
     private val alertRepository: AlertRepository? = null
 ) {
+    private val db: FirebaseFirestore = Firebase.firestore
+
+    init {
+        // Enable Firebase Offline Persistence for Detections
+        val settings = firestoreSettings {
+            setLocalCacheSettings(persistentCacheSettings {})
+        }
+        db.firestoreSettings = settings
+    }
 
     companion object {
         private val insertMutex = Mutex()
@@ -50,10 +59,28 @@ class DetectionRepository(
 
             val rowId = dao.insertDetection(detection)
 
-            // Auto-generate alert for high confidence detections
+            // 1. Store locally in Firestore Cache (Syncs when online)
+            val detectionMap = hashMapOf(
+                "eventId" to detection.eventId,
+                "timestamp" to detection.timestamp,
+                "sector" to detection.sector,
+                "sectorLabel" to detection.sectorLabel,
+                "angle" to detection.angle,
+                "confidence" to detection.confidence,
+                "motionLabel" to detection.motionLabel,
+                "deviceId" to detection.deviceId
+            )
+            
+            db.collection("radar_detections")
+                .add(detectionMap)
+                .addOnFailureListener {
+                    // Firestore handles local caching automatically
+                }
+
+            // 2. Auto-generate alert for high confidence detections
             if (detection.confidence >= 50 && alertRepository != null) {
                 val alert = AlertEntity(
-                    detectionId = rowId, // Note: dao.insertDetection returns Long ID
+                    detectionId = rowId,
                     timestamp = detection.timestamp,
                     confidence = detection.confidence,
                     sector = detection.sector,
@@ -77,14 +104,13 @@ class DetectionRepository(
 
 class AlertRepository(private val dao: AlertDao) {
     
-    private val db: FirebaseFirestore
+    private val db: FirebaseFirestore = Firebase.firestore
 
     init {
         // Enable Firebase Offline Persistence
         val settings = firestoreSettings {
             setLocalCacheSettings(persistentCacheSettings {})
         }
-        db = Firebase.firestore
         db.firestoreSettings = settings
     }
     
