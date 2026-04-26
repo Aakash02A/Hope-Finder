@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
     <cache-path name="reports" path="reports/" />
+    <external-cache-path name="ext_reports" path="reports/" />
+    <files-path name="internal_files" path="." />
 </paths>

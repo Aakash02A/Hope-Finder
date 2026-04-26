@@ -9,6 +9,7 @@ import com.tryout.hopefinder.network.DeviceApiClient
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import android.content.Intent
+import android.util.Log
 import androidx.core.content.FileProvider
 import java.io.File
 import java.text.SimpleDateFormat
@@ -61,6 +62,12 @@ class DashboardViewModel(
                 result.onSuccess { response ->
                     _scanStatus.value = "Scan started successfully"
                     
+                    // Update MainViewModel intent
+                    (deviceStatusRepository as? com.tryout.hopefinder.data.DeviceStatusRepository)?.let {
+                        // This is tricky because we don't have MainViewModel here. 
+                        // But we can update the repository status which MainViewModel will later override.
+                    }
+
                     // Update local status immediately to trigger UI
                     val currentStatus = deviceStatusRepository.getLatestStatus().firstOrNull()
                     val newStatus = (currentStatus ?: DeviceStatusEntity(
@@ -496,7 +503,7 @@ class ReportsViewModel(
     private fun shareFile(file: File) {
         try {
             val uri = FileProvider.getUriForFile(
-                context,
+                context.applicationContext, // Use applicationContext for safety
                 "${context.packageName}.fileprovider",
                 file
             )
@@ -504,12 +511,13 @@ class ReportsViewModel(
                 type = if (file.name.endsWith(".csv")) "text/csv" else "text/plain"
                 putExtra(Intent.EXTRA_STREAM, uri)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                // Remove FLAG_ACTIVITY_NEW_TASK from the primary intent as it can break some choosers
             }
-            context.startActivity(Intent.createChooser(intent, "Share Report").apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            })
+            val chooser = Intent.createChooser(intent, "Share Report")
+            chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) // Only chooser needs this
+            context.startActivity(chooser)
         } catch (e: Exception) {
+            Log.e("ReportsViewModel", "Share failed", e)
             _exportStatus.value = "Share failed: ${e.message}"
         }
     }

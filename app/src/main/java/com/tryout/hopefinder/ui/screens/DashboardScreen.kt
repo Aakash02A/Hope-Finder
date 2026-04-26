@@ -34,6 +34,7 @@ import kotlinx.coroutines.flow.StateFlow
 fun DashboardScreen(
     context: android.content.Context? = null,
     paddingValues: PaddingValues = PaddingValues(0.dp),
+    mainViewModel: MainViewModel = viewModel(factory = context?.let { MainViewModelFactory(it) }),
     viewModel: DashboardViewModel = viewModel(
         factory = context?.let { DashboardViewModelFactory(it) }
     )
@@ -245,13 +246,19 @@ fun DashboardScreen(
                 if (isScanning) {
                     EmergencyButton(
                         "Stop Scan",
-                        onClick = { viewModel.stopScan() },
+                        onClick = { 
+                            viewModel.stopScan()
+                            mainViewModel.setUserScanning(false)
+                        },
                         isDestructive = true
                     )
                 } else {
                     EmergencyButton(
                         "Start Scan",
-                        onClick = { viewModel.startScan() }
+                        onClick = { 
+                            viewModel.startScan()
+                            mainViewModel.setUserScanning(true)
+                        }
                     )
                 }
                 EmergencyButton(

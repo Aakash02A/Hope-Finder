@@ -36,6 +36,7 @@ import kotlin.math.*
 fun RadarScreen(
     context: android.content.Context? = null,
     paddingValues: PaddingValues = PaddingValues(0.dp),
+    mainViewModel: MainViewModel = viewModel(factory = context?.let { MainViewModelFactory(it) }),
     viewModel: RadarViewModel = viewModel(
         factory = context?.let { RadarViewModelFactory(it) }
     )
@@ -57,8 +58,14 @@ fun RadarScreen(
         RadarHeaderBar(
             showHeatMap = showHeatMap,
             onHeatMapToggle = { showHeatMap = it },
-            onStartScan = { viewModel.startScan() },
-            onStopScan = { viewModel.stopScan() }
+            onStartScan = { 
+                viewModel.startScan()
+                mainViewModel.setUserScanning(true)
+            },
+            onStopScan = { 
+                viewModel.stopScan()
+                mainViewModel.setUserScanning(false)
+            }
         )
         
         LazyColumn(

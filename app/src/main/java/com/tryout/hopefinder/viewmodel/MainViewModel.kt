@@ -56,6 +56,13 @@ class MainViewModel(
         startPolling()
     }
 
+    private val _isUserScanning = MutableStateFlow(false)
+    val isUserScanning: StateFlow<Boolean> = _isUserScanning.asStateFlow()
+
+    fun setUserScanning(scanning: Boolean) {
+        _isUserScanning.value = scanning
+    }
+
     fun startPolling() {
         pollingJob?.cancel()
         pollingJob = viewModelScope.launch {
@@ -108,7 +115,7 @@ class MainViewModel(
                                 rssi = -50,
                                 radarHealthy = true,
                                 calibrated = true,
-                                scanning = true, // Force scanning true if we can see data
+                                scanning = _isUserScanning.value, // Follow user intent instead of forcing true
                                 currentSector = 0,
                                 currentAngle = 0,
                                 uptime = 0,
